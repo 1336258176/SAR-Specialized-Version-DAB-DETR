@@ -27,3 +27,7 @@ scripts/
 models/dab_deformable_detr/ops/build/
 models/dab_deformable_detr/ops/dist/
 models/dab_deformable_detr/ops/MultiScaleDeformableAttention.egg-info/
+output/
+pth/
+tools/plots/
+tools/priors/

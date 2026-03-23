@@ -1,0 +1,435 @@
+
+============================================================
+           DAB-DETR 网络结构（PyTorch 原生）
+============================================================
+DABDETR(
+  (transformer): Transformer(
+    (encoder): TransformerEncoder(
+      (layers): ModuleList(
+        (0-5): 6 x TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.0, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=256, bias=True)
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.0, inplace=False)
+          (dropout2): Dropout(p=0.0, inplace=False)
+          (activation): PReLU(num_parameters=1)
+        )
+      )
+      (query_scale): MLP(
+        (layers): ModuleList(
+          (0-1): 2 x Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+    )
+    (decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (sa_qcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_qpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_kcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_kpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_v_proj): Linear(in_features=256, out_features=256, bias=True)
+          (self_attn): MultiheadAttention(
+            (out_proj): Linear(in_features=256, out_features=256, bias=True)
+          )
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.0, inplace=False)
+          (ca_qcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_qpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_kcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_kpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_v_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_qpos_sine_proj): Linear(in_features=256, out_features=256, bias=True)
+          (cross_attn): MultiheadAttention(
+            (out_proj): Linear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.0, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=256, bias=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout2): Dropout(p=0.0, inplace=False)
+          (dropout3): Dropout(p=0.0, inplace=False)
+          (activation): PReLU(num_parameters=1)
+        )
+        (1-5): 5 x TransformerDecoderLayer(
+          (sa_qcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_qpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_kcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_kpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (sa_v_proj): Linear(in_features=256, out_features=256, bias=True)
+          (self_attn): MultiheadAttention(
+            (out_proj): Linear(in_features=256, out_features=256, bias=True)
+          )
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.0, inplace=False)
+          (ca_qcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_qpos_proj): None
+          (ca_kcontent_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_kpos_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_v_proj): Linear(in_features=256, out_features=256, bias=True)
+          (ca_qpos_sine_proj): Linear(in_features=256, out_features=256, bias=True)
+          (cross_attn): MultiheadAttention(
+            (out_proj): Linear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.0, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=256, bias=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout2): Dropout(p=0.0, inplace=False)
+          (dropout3): Dropout(p=0.0, inplace=False)
+          (activation): PReLU(num_parameters=1)
+        )
+      )
+      (norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (query_scale): MLP(
+        (layers): ModuleList(
+          (0-1): 2 x Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (ref_point_head): MLP(
+        (layers): ModuleList(
+          (0): Linear(in_features=512, out_features=256, bias=True)
+          (1): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (ref_anchor_head): MLP(
+        (layers): ModuleList(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): Linear(in_features=256, out_features=2, bias=True)
+        )
+      )
+      (bbox_embed): MLP(
+        (layers): ModuleList(
+          (0-1): 2 x Linear(in_features=256, out_features=256, bias=True)
+          (2): Linear(in_features=256, out_features=4, bias=True)
+        )
+      )
+    )
+  )
+  (class_embed): Linear(in_features=256, out_features=2, bias=True)
+  (bbox_embed): MLP(
+    (layers): ModuleList(
+      (0-1): 2 x Linear(in_features=256, out_features=256, bias=True)
+      (2): Linear(in_features=256, out_features=4, bias=True)
+    )
+  )
+  (refpoint_embed): Embedding(300, 4)
+  (input_proj): Conv2d(2048, 256, kernel_size=(1, 1), stride=(1, 1))
+  (backbone): Joiner(
+    (0): Backbone(
+      (body): IntermediateLayerGetter(
+        (conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        (bn1): FrozenBatchNorm2d()
+        (relu): ReLU(inplace=True)
+        (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+        (layer1): Sequential(
+          (0): Bottleneck(
+            (conv1): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+              (1): FrozenBatchNorm2d()
+            )
+          )
+          (1): Bottleneck(
+            (conv1): Conv2d(256, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (2): Bottleneck(
+            (conv1): Conv2d(256, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(64, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+        )
+        (layer2): Sequential(
+          (0): Bottleneck(
+            (conv1): Conv2d(256, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): FrozenBatchNorm2d()
+            )
+          )
+          (1): Bottleneck(
+            (conv1): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (2): Bottleneck(
+            (conv1): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (3): Bottleneck(
+            (conv1): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(128, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+        )
+        (layer3): Sequential(
+          (0): Bottleneck(
+            (conv1): Conv2d(512, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(512, 1024, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): FrozenBatchNorm2d()
+            )
+          )
+          (1): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (2): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (3): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (4): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (5): Bottleneck(
+            (conv1): Conv2d(1024, 256, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(256, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+        )
+        (layer4): Sequential(
+          (0): Bottleneck(
+            (conv1): Conv2d(1024, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+            (downsample): Sequential(
+              (0): Conv2d(1024, 2048, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): FrozenBatchNorm2d()
+            )
+          )
+          (1): Bottleneck(
+            (conv1): Conv2d(2048, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+          (2): Bottleneck(
+            (conv1): Conv2d(2048, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn1): FrozenBatchNorm2d()
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): FrozenBatchNorm2d()
+            (conv3): Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (bn3): FrozenBatchNorm2d()
+            (relu): ReLU(inplace=True)
+          )
+        )
+      )
+    )
+    (1): PositionEmbeddingSine()
+  )
+)
+
+============================================================
+模块                                         参数量          可训练参数量
+============================================================
+  transformer                       19,667,474      19,667,474
+  class_embed                              514             514
+  bbox_embed                           132,612         132,612
+  refpoint_embed                         1,200           1,200
+  input_proj                           524,544         524,544
+  backbone                          23,454,912      23,232,512
+------------------------------------------------------------
+  全部参数合计                            43,648,644      43,426,244
+============================================================
+
+============================================================
+      DAB-DETR torchinfo 详细摘要（input: 1×3×640×640）
+============================================================
+=================================================================================================================================================
+Layer (type:depth-idx)                                            Input Shape          Output Shape         Param #              Trainable
+=================================================================================================================================================
+DABDETRWrapper                                                    [1, 3, 640, 640]     [1, 300, 2]          --                   Partial
+├─DABDETR: 1-1                                                    [1, 3, 640, 640]     [1, 300, 2]          --                   Partial
+│    └─Joiner: 2-1                                                [1, 3, 640, 640]     [1, 2048, 20, 20]    --                   Partial
+│    │    └─Backbone: 3-1                                         [1, 3, 640, 640]     [1, 2048, 20, 20]    --                   Partial
+│    │    │    └─IntermediateLayerGetter: 4-1                     [1, 3, 640, 640]     [1, 2048, 20, 20]    23,454,912           Partial
+│    │    └─PositionEmbeddingSine: 3-2                            [1, 2048, 20, 20]    [1, 256, 20, 20]     --                   --
+│    └─Conv2d: 2-2                                                [1, 2048, 20, 20]    [1, 256, 20, 20]     524,544              True
+│    └─Transformer: 2-3                                           [1, 256, 20, 20]     [6, 1, 300, 256]     --                   True
+│    │    └─TransformerEncoder: 3-3                               [400, 1, 256]        [400, 1, 256]        --                   True
+│    │    │    └─MLP: 4-2                                         [400, 1, 256]        [400, 1, 256]        131,584              True
+│    │    │    └─ModuleList: 4-13                                 --                   --                   (recursive)          True
+│    │    │    └─MLP: 4-4                                         [400, 1, 256]        [400, 1, 256]        (recursive)          True
+│    │    │    └─ModuleList: 4-13                                 --                   --                   (recursive)          True
+│    │    │    └─MLP: 4-6                                         [400, 1, 256]        [400, 1, 256]        (recursive)          True
+│    │    │    └─ModuleList: 4-13                                 --                   --                   (recursive)          True
+│    │    │    └─MLP: 4-8                                         [400, 1, 256]        [400, 1, 256]        (recursive)          True
+│    │    │    └─ModuleList: 4-13                                 --                   --                   (recursive)          True
+│    │    │    └─MLP: 4-10                                        [400, 1, 256]        [400, 1, 256]        (recursive)          True
+│    │    │    └─ModuleList: 4-13                                 --                   --                   (recursive)          True
+│    │    │    └─MLP: 4-12                                        [400, 1, 256]        [400, 1, 256]        (recursive)          True
+│    │    │    └─ModuleList: 4-13                                 --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-4                               [300, 1, 256]        [6, 1, 300, 256]     9,474,313            True
+│    │    │    └─MLP: 4-14                                        [300, 1, 512]        [300, 1, 256]        197,120              True
+│    │    │    └─MLP: 4-15                                        [300, 1, 256]        [300, 1, 2]          66,306               True
+│    │    │    └─ModuleList: 4-56                                 --                   --                   (recursive)          True
+│    └─MLP: 2-4                                                   [300, 1, 256]        [300, 1, 4]          --                   True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-17                                     [300, 1, 256]        [300, 1, 256]        65,792               True
+│    │    │    └─Linear: 4-18                                     [300, 1, 256]        [300, 1, 256]        65,792               True
+│    │    │    └─Linear: 4-19                                     [300, 1, 256]        [300, 1, 4]          1,028                True
+│    └─Transformer: 2-15                                          --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-16                              --                   --                   (recursive)          True
+│    │    │    └─LayerNorm: 4-20                                  [300, 1, 256]        [300, 1, 256]        512                  True
+│    │    │    └─MLP: 4-21                                        [300, 1, 512]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-22                                        [300, 1, 256]        [300, 1, 256]        131,584              True
+│    │    │    └─MLP: 4-23                                        [300, 1, 256]        [300, 1, 2]          (recursive)          True
+│    │    │    └─ModuleList: 4-56                                 --                   --                   (recursive)          True
+│    └─MLP: 2-6                                                   [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-25                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-26                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-27                                     [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    └─Transformer: 2-15                                          --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-16                              --                   --                   (recursive)          True
+│    │    │    └─LayerNorm: 4-28                                  [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-29                                        [300, 1, 512]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-30                                        [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-31                                        [300, 1, 256]        [300, 1, 2]          (recursive)          True
+│    │    │    └─ModuleList: 4-56                                 --                   --                   (recursive)          True
+│    └─MLP: 2-8                                                   [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-33                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-34                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-35                                     [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    └─Transformer: 2-15                                          --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-16                              --                   --                   (recursive)          True
+│    │    │    └─LayerNorm: 4-36                                  [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-37                                        [300, 1, 512]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-38                                        [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-39                                        [300, 1, 256]        [300, 1, 2]          (recursive)          True
+│    │    │    └─ModuleList: 4-56                                 --                   --                   (recursive)          True
+│    └─MLP: 2-10                                                  [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-41                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-42                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-43                                     [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    └─Transformer: 2-15                                          --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-16                              --                   --                   (recursive)          True
+│    │    │    └─LayerNorm: 4-44                                  [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-45                                        [300, 1, 512]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-46                                        [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-47                                        [300, 1, 256]        [300, 1, 2]          (recursive)          True
+│    │    │    └─ModuleList: 4-56                                 --                   --                   (recursive)          True
+│    └─MLP: 2-12                                                  [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-49                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-50                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-51                                     [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    └─Transformer: 2-15                                          --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-16                              --                   --                   (recursive)          True
+│    │    │    └─LayerNorm: 4-52                                  [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-53                                        [300, 1, 512]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-54                                        [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─MLP: 4-55                                        [300, 1, 256]        [300, 1, 2]          (recursive)          True
+│    │    │    └─ModuleList: 4-56                                 --                   --                   (recursive)          True
+│    └─MLP: 2-14                                                  [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-57                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-58                                     [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─Linear: 4-59                                     [300, 1, 256]        [300, 1, 4]          (recursive)          True
+│    └─Transformer: 2-15                                          --                   --                   (recursive)          True
+│    │    └─TransformerDecoder: 3-16                              --                   --                   (recursive)          True
+│    │    │    └─LayerNorm: 4-60                                  [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    │    │    └─LayerNorm: 4-61                                  [300, 1, 256]        [300, 1, 256]        (recursive)          True
+│    └─MLP: 2-16                                                  [6, 1, 300, 256]     [6, 1, 300, 4]       (recursive)          True
+│    │    └─ModuleList: 3-17                                      --                   --                   (recursive)          True
+│    │    │    └─Linear: 4-62                                     [6, 1, 300, 256]     [6, 1, 300, 256]     (recursive)          True
+│    │    │    └─Linear: 4-63                                     [6, 1, 300, 256]     [6, 1, 300, 256]     (recursive)          True
+│    │    │    └─Linear: 4-64                                     [6, 1, 300, 256]     [6, 1, 300, 4]       (recursive)          True
+│    └─Linear: 2-17                                               [6, 1, 300, 256]     [6, 1, 300, 2]       514                  True
+=================================================================================================================================================
+Total params: 53,121,757
+Trainable params: 52,899,357
+Non-trainable params: 222,400
+Total mult-adds (G): 40.54
+=================================================================================================================================================
+Input size (MB): 4.92
+Forward/backward pass size (MB): 981.16
+Params size (MB): 165.12
+Estimated Total Size (MB): 1151.20
+=================================================================================================================================================

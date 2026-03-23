@@ -1,0 +1,80 @@
+====================================================================================================
+  Experiment Environment Report
+====================================================================================================
+========================================================================
+  Date & Time
+------------------------------------------------------------------------
+Timestamp : 2026-03-17 16:11:08
+Timezone  : CST
+
+========================================================================
+  System Information
+------------------------------------------------------------------------
+Hostname  : autodl-container-e89b48b1ac-57c1ce6e
+OS        : Linux 5.15.0-78-generic (#85-Ubuntu SMP Fri Jul 7 15:25:09 UTC 2023)
+Machine   : x86_64
+CPU model : Intel(R) Xeon(R) Platinum 8470Q
+CPU cores : 208 logical / 104 physical
+RAM total : 754.5 GB
+
+========================================================================
+  Python
+------------------------------------------------------------------------
+Version    : 3.10.8 (main, Nov 24 2022, 14:13:03) [GCC 11.2.0]
+Executable : /root/miniconda3/bin/python
+Prefix     : /root/miniconda3
+
+========================================================================
+  PyTorch
+------------------------------------------------------------------------
+torch version      : 2.1.2+cu121
+CUDA available     : True
+CUDA build version : 12.1
+cuDNN version      : 8902
+cuDNN enabled      : True
+cuDNN benchmark    : False
+torchvision          : 0.16.2+cu121
+torchaudio           : not installed
+
+========================================================================
+  GPU / CUDA
+------------------------------------------------------------------------
+Device count : 1
+
+  [GPU 0]
+    Name              : NVIDIA GeForce RTX 4080 SUPER
+    Total memory      : 31.5 GB
+    Compute capability: 8.9
+    Multi-processors  : 80
+
+  NVIDIA driver version : 580.105.08
+  CUDA runtime (nvcc)   : release 12.1
+
+========================================================================
+  Key Packages
+------------------------------------------------------------------------
+numpy                          : 1.26.3
+scipy                          : 1.15.3
+Pillow                         : 10.2.0
+matplotlib                     : 3.8.2
+pycocotools                    : 2.0.11
+timm                           : 1.0.25
+
+========================================================================
+  Environment Variables
+------------------------------------------------------------------------
+CUDA_VISIBLE_DEVICES      : (not set)
+CUDA_HOME                 : (not set)
+CUDA_PATH                 : (not set)
+LD_LIBRARY_PATH           : (not set)
+PATH                      : /root/miniconda3/bin:/usr/local/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PYTHONPATH                : (not set)
+OMP_NUM_THREADS           : 0
+MKL_NUM_THREADS           : 0
+NCCL_DEBUG                : (not set)
+MASTER_ADDR               : (not set)
+MASTER_PORT               : (not set)
+WORLD_SIZE                : (not set)
+RANK                      : (not set)
+LOCAL_RANK                : (not set)
+
