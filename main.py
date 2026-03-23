@@ -39,8 +39,10 @@ def get_args_parser():
     parser.add_argument('--batch_size', default=2, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
     parser.add_argument('--epochs', default=300, type=int)
-    parser.add_argument('--lr_drop', default=200, type=int)
+    parser.add_argument("--lr_T_max", default=100, type=int)
+    parser.add_argument("--lr_eta_min", default=0, type=float)
     parser.add_argument('--save_checkpoint_interval', default=100, type=int)
+    parser.add_argument("--use_prior_box", action="store_true")
     parser.add_argument('--clip_max_norm', default=0.1, type=float,
                         help='gradient clipping max norm')
 
@@ -135,6 +137,7 @@ def get_args_parser():
 
 
     # dataset parameters
+    parser.add_argument("--dataset_class", default="HRSID")
     parser.add_argument('--dataset_file', default='coco')
     parser.add_argument('--coco_path', type=str, required=True)
     parser.add_argument('--coco_panoptic_path', type=str)
@@ -264,9 +267,6 @@ def main(args):
     data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers)
 
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
-
-
     if args.dataset_file == "coco_panoptic":
         # We also evaluate AP during panoptic training, on original coco DS
         coco_val = datasets.coco.build("val", args)
@@ -288,8 +288,14 @@ def main(args):
         model_without_ddp.load_state_dict(checkpoint['model'])
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
+
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.lr_T_max, eta_min=args.lr_eta_min, last_epoch=args.start_epoch - 1
+    )
+
+    if args.resume and not args.eval and "lr_scheduler" in checkpoint:
+        lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
 
     if not args.resume and args.pretrain_model_path:
         checkpoint = torch.load(args.pretrain_model_path, map_location='cpu')['model']
@@ -304,9 +310,10 @@ def main(args):
                     return False
             return True
 
-        logger.info("Ignore keys: {}".format(json.dumps(ignorelist, indent=2)))
         _tmp_st = OrderedDict({k:v for k, v in clean_state_dict(checkpoint).items() if check_keep(k, _ignorekeywordlist)})
         _load_output = model_without_ddp.load_state_dict(_tmp_st, strict=False)
+
+        logger.info("Ignore keys: {}".format(json.dumps(ignorelist, indent=2)))
         logger.info(str(_load_output))
         # import ipdb; ipdb.set_trace()
 
@@ -326,6 +333,7 @@ def main(args):
         return
 
     print("Start training")
+    lr_drop = (args.lr_T_max - args.start_epoch - 1) // 2 + args.start_epoch
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         epoch_start_time = time.time()
@@ -337,8 +345,8 @@ def main(args):
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % args.lr_drop == 0:
-                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}_beforedrop.pth')
+            if (epoch + 1) % lr_drop == 0:
+                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}_beforehalf.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
@@ -352,7 +360,7 @@ def main(args):
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % args.save_checkpoint_interval == 0:
+            if (epoch + 1) % lr_drop == 0 or (epoch + 1) % args.save_checkpoint_interval == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({

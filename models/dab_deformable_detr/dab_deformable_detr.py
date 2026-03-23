@@ -39,7 +39,8 @@ class DABDeformableDETR(nn.Module):
     """ This is the DAB-Deformable-DETR for object detection """
     def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels,
                  aux_loss=True, with_box_refine=True, two_stage=False,
-                 use_dab=True, 
+                 use_dab=True,
+                 use_prior_box=False,
                  num_patterns=0,
                  random_refpoints_xy=False,
                  ):
@@ -73,12 +74,25 @@ class DABDeformableDETR(nn.Module):
             else:
                 self.tgt_embed = nn.Embedding(num_queries, hidden_dim)
                 self.refpoint_embed = nn.Embedding(num_queries, 4)
-                if random_refpoints_xy:
-                    # import ipdb; ipdb.set_trace()
-                    self.refpoint_embed.weight.data[:, :2].uniform_(0,1)
-                    self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
-                    self.refpoint_embed.weight.data[:, :2].requires_grad = False
                 
+                # --- [Hardcode KMeans Prior Boxes] ---
+                import os
+                import numpy as np
+                if use_prior_box and num_queries == 300:
+                    prior_path = os.path.join(os.path.dirname(__file__), 'tools/priors/hrsid_priors_300.npy')
+                    priors = np.load(prior_path)
+                    self.refpoint_embed.weight.data = inverse_sigmoid(torch.tensor(priors, dtype=torch.float32))
+                    # Optional: freeze the initial reference points
+                    # self.refpoint_embed.weight.requires_grad = False
+                else:
+                    if random_refpoints_xy:
+                        # import ipdb; ipdb.set_trace()
+                        self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
+                        self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                            self.refpoint_embed.weight.data[:, :2]
+                        )
+                        self.refpoint_embed.weight.data[:, :2].requires_grad = False
+
 
         if self.num_patterns > 0:
             self.patterns_embed = nn.Embedding(self.num_patterns, hidden_dim)
@@ -494,6 +508,10 @@ def build_dab_deformable_detr(args):
     num_classes = 20 if args.dataset_file != 'coco' else 91
     if args.dataset_file == "coco_panoptic":
         num_classes = 250
+
+    if args.dataset_class == "HRSID":
+        num_classes = 2
+
     device = torch.device(args.device)
 
     backbone = build_backbone(args)
@@ -508,6 +526,7 @@ def build_dab_deformable_detr(args):
         aux_loss=args.aux_loss,
         two_stage=args.two_stage,
         use_dab=True,
+        use_prior_box=args.use_prior_box,
         num_patterns=args.num_patterns,
         random_refpoints_xy=args.random_refpoints_xy
     )
