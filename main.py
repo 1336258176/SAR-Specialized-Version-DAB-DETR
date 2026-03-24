@@ -333,7 +333,10 @@ def main(args):
         return
 
     print("Start training")
-    lr_drop = (args.lr_T_max - args.start_epoch - 1) // 2 + args.start_epoch
+
+    # Replace the original lr_drop with lr_half
+    lr_half = (args.lr_T_max - args.start_epoch - 1) // 2 + args.start_epoch
+
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         epoch_start_time = time.time()
@@ -345,7 +348,7 @@ def main(args):
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % lr_drop == 0:
+            if (epoch + 1) % lr_half == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}_beforehalf.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
@@ -360,7 +363,7 @@ def main(args):
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % lr_drop == 0 or (epoch + 1) % args.save_checkpoint_interval == 0:
+            if (epoch + 1) % lr_half == 0 or (epoch + 1) % args.save_checkpoint_interval == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
