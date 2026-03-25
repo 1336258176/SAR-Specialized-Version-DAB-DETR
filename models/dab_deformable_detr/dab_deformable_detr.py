@@ -68,6 +68,7 @@ class DABDeformableDETR(nn.Module):
         self.use_dab = use_dab
         self.num_patterns = num_patterns
         self.random_refpoints_xy = random_refpoints_xy
+
         if not two_stage:
             if not use_dab:
                 self.query_embed = nn.Embedding(num_queries, hidden_dim*2)
@@ -75,18 +76,32 @@ class DABDeformableDETR(nn.Module):
                 self.tgt_embed = nn.Embedding(num_queries, hidden_dim)
                 self.refpoint_embed = nn.Embedding(num_queries, 4)
                 
-                # --- [Hardcode KMeans Prior Boxes] ---
-                import os
-                import numpy as np
+                # --- [Modified for HRSID KMeans Prior Boxes] ---
                 if use_prior_box and num_queries == 300:
-                    prior_path = os.path.join(os.path.dirname(__file__), 'tools/priors/hrsid_priors_300.npy')
-                    priors = np.load(prior_path)
-                    self.refpoint_embed.weight.data = inverse_sigmoid(torch.tensor(priors, dtype=torch.float32))
-                    # Optional: freeze the initial reference points
+                    import os
+                    import torch
+
+                    # 1. 随机初始化目标框的中心点 x, y (0~1的均匀分布)
+                    init_xy = torch.rand(num_queries, 2)
+
+                    # 2. 加载上一步生成的 HRSID 专属先验 w, h
+                    prior_path = 'tools/priors/hrsid_prior_wh.pt' 
+                    
+                    if not os.path.exists(prior_path):
+                        raise FileNotFoundError(f"找不到先验框文件: {prior_path}，请检查路径！")
+                        
+                    init_wh = torch.load(prior_path)
+                    
+                    # 3. 拼接成完整的 (x, y, w, h)，维度为 [300, 4]
+                    init_refpoints = torch.cat([init_xy, init_wh], dim=-1)
+                    
+                    # 4. 由于网络后面会对其做 sigmoid，这里必须提前做 inverse_sigmoid
+                    self.refpoint_embed.weight.data = inverse_sigmoid(init_refpoints)
+                    
+                    # （可选）如果你希望宽和高完全固定不变，取消下面这行注释：
                     # self.refpoint_embed.weight.requires_grad = False
                 else:
                     if random_refpoints_xy:
-                        # import ipdb; ipdb.set_trace()
                         self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
                         self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
                             self.refpoint_embed.weight.data[:, :2]

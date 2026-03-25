@@ -6,6 +6,7 @@ python main.py \
     --dataset_class HRSID \
     --coco_path ../autodl-tmp/HRSID/HRSID_png \
     --output_dir output/dab_deformable_detr/fine_tuning_modifyparams/epoch_0_49 \
+    --use_prior_box \
     --batch_size 4 \
     --epochs 50 \
     --lr 1e-4 \
@@ -20,5 +21,4 @@ python main.py \
     --save_log \
     --pretrain_model_path ../model_zoo/DAB_Deformable_DETR/R50/checkpoint.pth \
     --finetune_ignore class_embed
-    # --use_prior_box \
     # --resume output/dab_deformable_detr/epoch_0_24/checkpoint.pth \
