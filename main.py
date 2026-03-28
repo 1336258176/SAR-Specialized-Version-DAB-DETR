@@ -42,7 +42,6 @@ def get_args_parser():
     parser.add_argument("--lr_T_max", default=100, type=int)
     parser.add_argument("--lr_eta_min", default=0, type=float)
     parser.add_argument('--save_checkpoint_interval', default=100, type=int)
-    parser.add_argument("--use_prior_box", action="store_true")
     parser.add_argument('--clip_max_norm', default=0.1, type=float,
                         help='gradient clipping max norm')
 

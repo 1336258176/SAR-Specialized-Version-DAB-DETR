@@ -12,10 +12,10 @@ logging.basicConfig(
 )
 
 def parse_args():
-    parser = argparse.ArgumentParser("K-Means for DAB-Deformable-DETR prior boxes")
+    parser = argparse.ArgumentParser("K-Means for DAB-Deformable-DETR box width-height clusters")
     parser.add_argument('--anno_file', '-i', type=str, required=True, help='Path to COCO instances_train.json')
-    parser.add_argument('--num_clusters', type=int, default=300, help='Number of prior boxes (queries)')
-    parser.add_argument('--output', '-o', type=str, default='tools/priors', help='Save path for priors directory')
+    parser.add_argument('--num_clusters', type=int, default=300, help='Number of width-height clusters')
+    parser.add_argument('--output', '-o', type=str, default='tools/priors', help='Output directory path')
     return parser.parse_args()
 
 def get_kmeans_anchors(coco_json_path, output_path, num_clusters=300):
@@ -48,16 +48,16 @@ def get_kmeans_anchors(coco_json_path, output_path, num_clusters=300):
     kmeans.fit(wh_array)
     
     cluster_centers = kmeans.cluster_centers_
-    prior_wh = torch.tensor(cluster_centers, dtype=torch.float32)
+    anchor_wh = torch.tensor(cluster_centers, dtype=torch.float32)
     
     os.makedirs(output_path, exist_ok=True)
-    output_file = os.path.join(output_path, "hrsid_prior_wh.pt")
+    output_file = os.path.join(output_path, "kmeans_anchor_wh.pt")
     
-    torch.save(prior_wh, output_file)
+    torch.save(anchor_wh, output_file)
     
     logging.info("聚类完成！")
-    logging.info(f"前5个聚类中心 (归一化 w, h):\n{prior_wh[:5]}")
-    logging.info(f"已将先验宽高保存至: {output_file}")
+    logging.info(f"前5个聚类中心 (归一化 w, h):\n{anchor_wh[:5]}")
+    logging.info(f"已将聚类宽高保存至: {output_file}")
 
 
 if __name__ == '__main__':

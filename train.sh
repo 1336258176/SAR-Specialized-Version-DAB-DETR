@@ -6,7 +6,6 @@ python main.py \
     --dataset_class HRSID \
     --coco_path ../autodl-tmp/HRSID/HRSID_png \
     --output_dir output/dab_deformable_detr/fine_tuning_modifyparams/epoch_0_49 \
-    --use_prior_box \
     --batch_size 4 \
     --epochs 50 \
     --lr 1e-4 \

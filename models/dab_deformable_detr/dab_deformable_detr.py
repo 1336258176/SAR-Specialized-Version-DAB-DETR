@@ -40,7 +40,6 @@ class DABDeformableDETR(nn.Module):
     def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels,
                  aux_loss=True, with_box_refine=True, two_stage=False,
                  use_dab=True,
-                 use_prior_box=False,
                  num_patterns=0,
                  random_refpoints_xy=False,
                  ):
@@ -75,38 +74,12 @@ class DABDeformableDETR(nn.Module):
             else:
                 self.tgt_embed = nn.Embedding(num_queries, hidden_dim)
                 self.refpoint_embed = nn.Embedding(num_queries, 4)
-                
-                # --- [Modified for HRSID KMeans Prior Boxes] ---
-                if use_prior_box and num_queries == 300:
-                    import os
-                    import torch
-
-                    # 1. 随机初始化目标框的中心点 x, y (0~1的均匀分布)
-                    init_xy = torch.rand(num_queries, 2)
-
-                    # 2. 加载上一步生成的 HRSID 专属先验 w, h
-                    prior_path = 'tools/priors/hrsid_prior_wh.pt' 
-                    
-                    if not os.path.exists(prior_path):
-                        raise FileNotFoundError(f"找不到先验框文件: {prior_path}，请检查路径！")
-                        
-                    init_wh = torch.load(prior_path)
-                    
-                    # 3. 拼接成完整的 (x, y, w, h)，维度为 [300, 4]
-                    init_refpoints = torch.cat([init_xy, init_wh], dim=-1)
-                    
-                    # 4. 由于网络后面会对其做 sigmoid，这里必须提前做 inverse_sigmoid
-                    self.refpoint_embed.weight.data = inverse_sigmoid(init_refpoints)
-                    
-                    # （可选）如果你希望宽和高完全固定不变，取消下面这行注释：
-                    # self.refpoint_embed.weight.requires_grad = False
-                else:
-                    if random_refpoints_xy:
-                        self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-                        self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
-                            self.refpoint_embed.weight.data[:, :2]
-                        )
-                        self.refpoint_embed.weight.data[:, :2].requires_grad = False
+                if random_refpoints_xy:
+                    self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
+                    self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                        self.refpoint_embed.weight.data[:, :2]
+                    )
+                    self.refpoint_embed.weight.data[:, :2].requires_grad = False
 
 
         if self.num_patterns > 0:
@@ -544,7 +517,6 @@ def build_dab_deformable_detr(args):
         aux_loss=args.aux_loss,
         two_stage=args.two_stage,
         use_dab=True,
-        use_prior_box=args.use_prior_box,
         num_patterns=args.num_patterns,
         random_refpoints_xy=args.random_refpoints_xy
     )
