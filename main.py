@@ -9,7 +9,7 @@ import random
 import time
 from pathlib import Path
 import os, sys
-from typing import Optional
+from typing import Dict
 
 
 from util.logger import setup_logger
@@ -176,6 +176,67 @@ def get_args_parser():
     parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel')
     parser.add_argument('--amp', action='store_true',
                         help="Train with mixed precision")
+
+    # Innovation toggles for ablation
+    parser.add_argument('--enable_ema', action='store_true',
+                        help='Enable EMA (Exponential Moving Average) model during training.')
+    parser.add_argument('--ema_decay', default=0.9997, type=float,
+                        help='EMA decay factor.')
+    parser.add_argument('--ema_device', default='', type=str,
+                        help='Optional EMA device, e.g. "cpu". Empty means same as training device.')
+    parser.add_argument('--use_ema_for_eval', action='store_true',
+                        help='Use EMA model for validation/evaluation.')
+
+    parser.add_argument('--enable_small_object_reweight', action='store_true',
+                        help='Enable small-object-aware reweighting in bbox and GIoU losses.')
+    parser.add_argument('--small_object_reweight_alpha', default=1.0, type=float,
+                        help='Reweight strength for small-object-aware bbox regression loss.')
+    parser.add_argument('--small_object_reweight_power', default=0.5, type=float,
+                        help='Exponent for small-object-aware bbox regression loss.')
+
+    parser.add_argument('--enable_backbone_warmup', action='store_true',
+                        help='Freeze backbone in early epochs, then unfreeze automatically.')
+    parser.add_argument('--backbone_warmup_epochs', default=0, type=int,
+                        help='Number of warmup epochs for backbone freezing.')
+
+    parser.add_argument('--enable_tta_eval', action='store_true',
+                        help='Enable multi-scale TTA during evaluation.')
+    parser.add_argument('--tta_scales', default=[1.0, 1.15, 1.3], nargs='+', type=float,
+                        help='Scale factors used by TTA evaluation.')
+    parser.add_argument('--tta_nms_iou_thresh', default=0.6, type=float,
+                        help='NMS IoU threshold for merging TTA predictions.')
+    parser.add_argument('--tta_score_thresh', default=0.05, type=float,
+                        help='Score threshold before TTA NMS merging.')
+    parser.add_argument('--tta_topk', default=100, type=int,
+                        help='Final top-k predictions per image after TTA merging.')
+
+    # SAR-specific data augmentations
+    parser.add_argument('--enable_sar_vertical_flip', action='store_true',
+                        help='Enable SAR-specific random vertical flip in training augmentation.')
+    parser.add_argument('--sar_vertical_flip_prob', default=0.5, type=float,
+                        help='Probability for SAR vertical flip augmentation.')
+    parser.add_argument('--enable_sar_speckle_aug', action='store_true',
+                        help='Enable SAR-specific multiplicative speckle noise augmentation.')
+    parser.add_argument('--sar_speckle_prob', default=0.35, type=float,
+                        help='Probability for SAR speckle augmentation.')
+    parser.add_argument('--sar_speckle_min_std', default=0.02, type=float,
+                        help='Minimum std for SAR speckle noise.')
+    parser.add_argument('--sar_speckle_max_std', default=0.10, type=float,
+                        help='Maximum std for SAR speckle noise.')
+    parser.add_argument('--enable_sar_contrast_stretch', action='store_true',
+                        help='Enable SAR-specific percentile contrast stretching.')
+    parser.add_argument('--sar_contrast_stretch_prob', default=0.35, type=float,
+                        help='Probability for SAR contrast stretching.')
+    parser.add_argument('--sar_contrast_stretch_lower_q', default=0.02, type=float,
+                        help='Lower percentile for SAR contrast stretching.')
+    parser.add_argument('--sar_contrast_stretch_upper_q', default=0.98, type=float,
+                        help='Upper percentile for SAR contrast stretching.')
+
+    # SAR-specific shape prior loss
+    parser.add_argument('--enable_sar_shape_prior_loss', action='store_true',
+                        help='Enable SAR ship shape prior loss on matched boxes.')
+    parser.add_argument('--sar_shape_prior_loss_coef', default=0.3, type=float,
+                        help='Loss coefficient for SAR shape prior loss.')
     return parser
 
 
@@ -188,6 +249,12 @@ def build_model_main(args):
         raise NotImplementedError
 
     return model, criterion, postprocessors
+
+
+def _set_backbone_trainable(model, base_backbone_flags: Dict[str, bool], is_trainable: bool):
+    for name, param in model.named_parameters():
+        if "backbone" in name and base_backbone_flags.get(name, False):
+            param.requires_grad = is_trainable
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -231,6 +298,12 @@ def main(args):
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=args.find_unused_params)
         model_without_ddp = model.module
+
+    base_backbone_flags = {
+        name: p.requires_grad
+        for name, p in model_without_ddp.named_parameters()
+        if "backbone" in name
+    }
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info('number of params:'+str(n_parameters))
     logger.info("params:\n"+json.dumps({n: p.numel() for n, p in model.named_parameters() if p.requires_grad}, indent=2))
@@ -246,6 +319,12 @@ def main(args):
 
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
                                   weight_decay=args.weight_decay)
+
+    ema_m = None
+    if args.enable_ema:
+        ema_device = args.ema_device if args.ema_device else None
+        ema_m = utils.ModelEma(model_without_ddp, decay=args.ema_decay, device=ema_device)
+        logger.info(f"EMA enabled: decay={args.ema_decay}, device={ema_device}")
     
 
     dataset_train = build_dataset(image_set='train', args=args)
@@ -285,6 +364,8 @@ def main(args):
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
         model_without_ddp.load_state_dict(checkpoint['model'])
+        if ema_m is not None and checkpoint.get('ema_model', None) is not None:
+            ema_m.module.load_state_dict(checkpoint['ema_model'])
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
             args.start_epoch = checkpoint['epoch'] + 1
@@ -319,7 +400,8 @@ def main(args):
 
     if args.eval:
         os.environ['EVAL_FLAG'] = 'TRUE'
-        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
+        eval_model = ema_m.module if (args.use_ema_for_eval and ema_m is not None) else model
+        test_stats, coco_evaluator = evaluate(eval_model, criterion, postprocessors,
                                               data_loader_val, base_ds, device, args.output_dir, wo_class_error=wo_class_error, args=args)
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
@@ -341,9 +423,17 @@ def main(args):
         epoch_start_time = time.time()
         if args.distributed:
             sampler_train.set_epoch(epoch)
+
+        if args.enable_backbone_warmup:
+            should_train_backbone = epoch >= args.backbone_warmup_epochs
+            _set_backbone_trainable(model_without_ddp, base_backbone_flags, should_train_backbone)
+            if epoch == args.start_epoch or epoch == args.backbone_warmup_epochs:
+                phase = "unfreeze" if should_train_backbone else "freeze"
+                logger.info(f"Backbone warmup controller: {phase} at epoch {epoch}")
+
         train_stats = train_one_epoch(
             model, criterion, data_loader_train, optimizer, device, epoch,
-            args.clip_max_norm, wo_class_error=wo_class_error, lr_scheduler=lr_scheduler, args=args, logger=(logger if args.save_log else None))
+            args.clip_max_norm, wo_class_error=wo_class_error, lr_scheduler=lr_scheduler, args=args, logger=(logger if args.save_log else None), ema_m=ema_m)
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 100 epochs
@@ -352,6 +442,7 @@ def main(args):
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
+                    'ema_model': ema_m.module.state_dict() if ema_m is not None else None,
                     'optimizer': optimizer.state_dict(),
                     'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
@@ -367,14 +458,16 @@ def main(args):
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
+                    'ema_model': ema_m.module.state_dict() if ema_m is not None else None,
                     'optimizer': optimizer.state_dict(),
                     'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
                     'args': args,
                 }, checkpoint_path)
         
+        eval_model = ema_m.module if (args.use_ema_for_eval and ema_m is not None) else model
         test_stats, coco_evaluator = evaluate(
-            model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir,
+            eval_model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir,
             wo_class_error=wo_class_error, args=args, logger=(logger if args.save_log else None)
         )
 

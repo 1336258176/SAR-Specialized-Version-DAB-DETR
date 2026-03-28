@@ -140,10 +140,25 @@ class ConvertCocoPolysToMask(object):
 
 def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None):
 
-    normalize = T.Compose([
-        T.ToTensor(),
-        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+    tensor_norm_transforms = [T.ToTensor()]
+    if args is not None and getattr(args, "enable_sar_contrast_stretch", False):
+        tensor_norm_transforms.append(
+            T.SARContrastStretch(
+                p=getattr(args, "sar_contrast_stretch_prob", 0.5),
+                lower_q=getattr(args, "sar_contrast_stretch_lower_q", 0.02),
+                upper_q=getattr(args, "sar_contrast_stretch_upper_q", 0.98),
+            )
+        )
+    if args is not None and getattr(args, "enable_sar_speckle_aug", False):
+        tensor_norm_transforms.append(
+            T.SARSpeckleNoise(
+                p=getattr(args, "sar_speckle_prob", 0.5),
+                min_std=getattr(args, "sar_speckle_min_std", 0.03),
+                max_std=getattr(args, "sar_speckle_max_std", 0.12),
+            )
+        )
+    tensor_norm_transforms.append(T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))
+    normalize = T.Compose(tensor_norm_transforms)
 
     # config the params for data aug
     scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
@@ -177,9 +192,14 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
         
 
     if image_set == 'train':
+        train_flip_prob = getattr(args, "sar_vertical_flip_prob", 0.5) if args is not None else 0.5
+        train_flips = [T.RandomHorizontalFlip()]
+        if args is not None and getattr(args, "enable_sar_vertical_flip", False):
+            train_flips.append(T.RandomVerticalFlip(train_flip_prob))
+
         if fix_size:
             return T.Compose([
-                T.RandomHorizontalFlip(),
+                *train_flips,
                 T.RandomResize([(max_size, max(scales))]),
                 normalize,
             ])
@@ -188,7 +208,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
             import datasets.sltransform as SLT
             
             return T.Compose([
-                T.RandomHorizontalFlip(),
+                *train_flips,
                 T.RandomSelect(
                     T.RandomResize(scales, max_size=max_size),
                     T.Compose([
@@ -214,7 +234,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
             ])
         
         return T.Compose([
-            T.RandomHorizontalFlip(),
+            *train_flips,
             T.RandomSelect(
                 T.RandomResize(scales, max_size=max_size),
                 T.Compose([
@@ -286,4 +306,3 @@ def build(image_set, args):
         )
 
     return dataset
-

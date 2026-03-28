@@ -11,10 +11,75 @@ from typing import Iterable
 from util.utils import slprint, to_device
 
 import torch
+import torch.nn.functional as F
+from torchvision.ops import batched_nms
 
 import util.misc as utils
 from datasets.coco_eval import CocoEvaluator
 from datasets.panoptic_eval import PanopticEvaluator
+from util.misc import NestedTensor, nested_tensor_from_tensor_list
+
+
+def _resize_nested_tensor(samples: NestedTensor, scale: float) -> NestedTensor:
+    if abs(scale - 1.0) < 1e-6:
+        return samples
+    resized_imgs = []
+    for img in samples.to_img_list():
+        _, h, w = img.shape
+        new_h = max(1, int(round(h * scale)))
+        new_w = max(1, int(round(w * scale)))
+        resized = F.interpolate(
+            img.unsqueeze(0), size=(new_h, new_w), mode='bilinear', align_corners=False
+        )[0]
+        resized_imgs.append(resized)
+    return nested_tensor_from_tensor_list(resized_imgs)
+
+
+@torch.no_grad()
+def _inference_with_tta(model, samples, targets, postprocessors, args, need_tgt_for_training):
+    orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+    scales = sorted(set([float(s) for s in args.tta_scales]))
+    all_scale_results = []
+    for scale in scales:
+        scale_samples = _resize_nested_tensor(samples, scale).to(samples.device)
+        with torch.cuda.amp.autocast(enabled=args.amp):
+            if need_tgt_for_training:
+                outputs_scale = model(scale_samples, targets)
+            else:
+                outputs_scale = model(scale_samples)
+        results_scale = postprocessors['bbox'](outputs_scale, orig_target_sizes)
+        all_scale_results.append(results_scale)
+
+    merged_results = []
+    for img_idx in range(len(targets)):
+        boxes = torch.cat([rs[img_idx]['boxes'] for rs in all_scale_results], dim=0)
+        scores = torch.cat([rs[img_idx]['scores'] for rs in all_scale_results], dim=0)
+        labels = torch.cat([rs[img_idx]['labels'] for rs in all_scale_results], dim=0)
+
+        if args.tta_score_thresh > 0:
+            keep = scores >= args.tta_score_thresh
+            boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
+
+        if boxes.numel() == 0:
+            merged_results.append(
+                {
+                    'boxes': boxes.reshape(0, 4),
+                    'scores': scores.reshape(0),
+                    'labels': labels.reshape(0),
+                }
+            )
+            continue
+
+        keep = batched_nms(boxes, scores, labels, args.tta_nms_iou_thresh)
+        keep = keep[:args.tta_topk]
+        merged_results.append(
+            {
+                'boxes': boxes[keep],
+                'scores': scores[keep],
+                'labels': labels[keep],
+            }
+        )
+    return merged_results
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
@@ -81,11 +146,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             scaler.update()
         else:
             # original backward function
+            optimizer.zero_grad()
             losses.backward()
             if max_norm > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
             optimizer.step()
 
+        if ema_m is not None:
+            ema_source_model = model.module if hasattr(model, "module") else model
+            ema_m.update(ema_source_model)
 
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
         if 'class_error' in loss_dict_reduced:
@@ -165,7 +234,10 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
             metric_logger.update(class_error=loss_dict_reduced['class_error'])
 
         orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
-        results = postprocessors['bbox'](outputs, orig_target_sizes)
+        if getattr(args, "enable_tta_eval", False):
+            results = _inference_with_tta(model, samples, targets, postprocessors, args, need_tgt_for_training)
+        else:
+            results = postprocessors['bbox'](outputs, orig_target_sizes)
         # [scores: [100], labels: [100], boxes: [100, 4]] x B
         if 'segm' in postprocessors.keys():
             target_sizes = torch.stack([t["size"] for t in targets], dim=0)
@@ -270,4 +342,3 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
     # import ipdb; ipdb.set_trace()
 
     return stats, coco_evaluator
-

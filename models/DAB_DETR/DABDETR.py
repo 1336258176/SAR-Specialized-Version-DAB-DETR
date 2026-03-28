@@ -204,7 +204,18 @@ class SetCriterion(nn.Module):
         1) we compute hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
-    def __init__(self, num_classes, matcher, weight_dict, focal_alpha, losses):
+    def __init__(
+        self,
+        num_classes,
+        matcher,
+        weight_dict,
+        focal_alpha,
+        losses,
+        small_object_reweight=False,
+        small_object_reweight_alpha=1.0,
+        small_object_reweight_power=0.5,
+        enable_sar_shape_prior_loss=False,
+    ):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -219,6 +230,17 @@ class SetCriterion(nn.Module):
         self.weight_dict = weight_dict
         self.losses = losses
         self.focal_alpha = focal_alpha
+        self.small_object_reweight = small_object_reweight
+        self.small_object_reweight_alpha = small_object_reweight_alpha
+        self.small_object_reweight_power = small_object_reweight_power
+        self.enable_sar_shape_prior_loss = enable_sar_shape_prior_loss
+
+    def _compute_box_reweight(self, target_boxes):
+        # target_boxes: [N, 4] in cxcywh normalized format.
+        if target_boxes.numel() == 0 or (not self.small_object_reweight):
+            return torch.ones((target_boxes.shape[0],), device=target_boxes.device, dtype=target_boxes.dtype)
+        area = (target_boxes[:, 2] * target_boxes[:, 3]).clamp(min=1e-6, max=1.0)
+        return 1.0 + self.small_object_reweight_alpha * torch.pow(1.0 - area, self.small_object_reweight_power)
         
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
@@ -272,14 +294,22 @@ class SetCriterion(nn.Module):
         target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
+        box_reweight = self._compute_box_reweight(target_boxes)
 
         losses = {}
-        losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+        losses['loss_bbox'] = (loss_bbox.sum(-1) * box_reweight).sum() / num_boxes
 
         loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             box_ops.box_cxcywh_to_xyxy(src_boxes),
             box_ops.box_cxcywh_to_xyxy(target_boxes)))
-        losses['loss_giou'] = loss_giou.sum() / num_boxes
+        losses['loss_giou'] = (loss_giou * box_reweight).sum() / num_boxes
+
+        if self.enable_sar_shape_prior_loss:
+            eps = 1e-6
+            src_ratio = torch.log((src_boxes[:, 2] + eps) / (src_boxes[:, 3] + eps))
+            tgt_ratio = torch.log((target_boxes[:, 2] + eps) / (target_boxes[:, 3] + eps))
+            loss_shape = F.l1_loss(src_ratio, tgt_ratio, reduction='none')
+            losses['loss_shape'] = (loss_shape * box_reweight).sum() / num_boxes
 
         # calculate the x,y and h,w loss
         with torch.no_grad():
@@ -493,6 +523,8 @@ def build_DABDETR(args):
     if args.masks:
         weight_dict["loss_mask"] = args.mask_loss_coef
         weight_dict["loss_dice"] = args.dice_loss_coef
+    if getattr(args, "enable_sar_shape_prior_loss", False):
+        weight_dict["loss_shape"] = args.sar_shape_prior_loss_coef
     # TODO this is a hack
     if args.aux_loss:
         aux_weight_dict = {}
@@ -504,7 +536,12 @@ def build_DABDETR(args):
     if args.masks:
         losses += ["masks"]
     criterion = SetCriterion(num_classes, matcher=matcher, weight_dict=weight_dict,
-                             focal_alpha=args.focal_alpha, losses=losses)
+                             focal_alpha=args.focal_alpha,
+                             losses=losses,
+                             small_object_reweight=getattr(args, "enable_small_object_reweight", False),
+                             small_object_reweight_alpha=getattr(args, "small_object_reweight_alpha", 1.0),
+                             small_object_reweight_power=getattr(args, "small_object_reweight_power", 0.5),
+                             enable_sar_shape_prior_loss=getattr(args, "enable_sar_shape_prior_loss", False))
     criterion.to(device)
     postprocessors = {'bbox': PostProcess(num_select=args.num_select)}
     if args.masks:

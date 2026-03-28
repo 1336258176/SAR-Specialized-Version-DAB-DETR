@@ -74,6 +74,23 @@ def hflip(image, target):
     return flipped_image, target
 
 
+def vflip(image, target):
+    flipped_image = F.vflip(image)
+
+    w, h = image.size
+
+    target = target.copy()
+    if "boxes" in target:
+        boxes = target["boxes"]
+        boxes = boxes[:, [0, 3, 2, 1]] * torch.as_tensor([1, -1, 1, -1]) + torch.as_tensor([0, h, 0, h])
+        target["boxes"] = boxes
+
+    if "masks" in target:
+        target['masks'] = target['masks'].flip(-2)
+
+    return flipped_image, target
+
+
 def resize(image, target, size, max_size=None):
     # size can be min_size (scalar) or (w, h) tuple
 
@@ -197,6 +214,16 @@ class RandomHorizontalFlip(object):
         return img, target
 
 
+class RandomVerticalFlip(object):
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, img, target):
+        if random.random() < self.p:
+            return vflip(img, target)
+        return img, target
+
+
 class RandomResize(object):
     def __init__(self, sizes, max_size=None):
         assert isinstance(sizes, (list, tuple))
@@ -237,6 +264,48 @@ class RandomSelect(object):
 class ToTensor(object):
     def __call__(self, img, target):
         return F.to_tensor(img), target
+
+
+class SARContrastStretch(object):
+    """
+    Percentile-based linear contrast stretching for SAR intensity images.
+    Works on Tensor image in [0, 1].
+    """
+    def __init__(self, p=0.5, lower_q=0.02, upper_q=0.98):
+        self.p = p
+        self.lower_q = lower_q
+        self.upper_q = upper_q
+
+    def __call__(self, img, target):
+        if random.random() >= self.p:
+            return img, target
+
+        c, _, _ = img.shape
+        flat = img.view(c, -1)
+        lo = torch.quantile(flat, self.lower_q, dim=1, keepdim=True)
+        hi = torch.quantile(flat, self.upper_q, dim=1, keepdim=True)
+        den = (hi - lo).clamp(min=1e-6)
+        img = ((flat - lo) / den).clamp(0.0, 1.0).view_as(img)
+        return img, target
+
+
+class SARSpeckleNoise(object):
+    """
+    Multiplicative speckle noise augmentation for SAR.
+    img <- img * (1 + n), where n ~ N(0, sigma), sigma sampled in [min_std, max_std].
+    """
+    def __init__(self, p=0.5, min_std=0.03, max_std=0.12):
+        self.p = p
+        self.min_std = min_std
+        self.max_std = max_std
+
+    def __call__(self, img, target):
+        if random.random() >= self.p:
+            return img, target
+        std = random.uniform(self.min_std, self.max_std)
+        noise = torch.randn_like(img) * std
+        img = (img * (1.0 + noise)).clamp(0.0, 1.0)
+        return img, target
 
 
 class RandomErasing(object):
