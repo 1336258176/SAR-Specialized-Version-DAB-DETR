@@ -24,7 +24,7 @@ import util.misc as utils
 from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate, train_one_epoch
 from models import build_DABDETR, build_dab_deformable_detr
-from util.utils import clean_state_dict
+from util.utils import clean_state_dict, ModelEma
 
 
 def get_args_parser():
@@ -402,7 +402,7 @@ def main(args):
     ema_m = None
     if args.enable_ema:
         ema_device = args.ema_device if args.ema_device else None
-        ema_m = utils.ModelEma(model_without_ddp, decay=args.ema_decay, device=ema_device)
+        ema_m = ModelEma(model_without_ddp, decay=args.ema_decay, device=ema_device)
         logger.info(f"EMA enabled: decay={args.ema_decay}, device={ema_device}")
     
 
