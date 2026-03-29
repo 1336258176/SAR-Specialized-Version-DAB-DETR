@@ -19,6 +19,13 @@ set -euo pipefail
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MAIN_FILE="main.py"
 
+# Minimal args required by argparse when resuming from checkpoint.
+# Keep this list short so main.py can restore most runtime args from checkpoint['args'].
+RESUME_REQUIRED_ARGS=(
+  --modelname dab_deformable_detr
+  --coco_path ../autodl-tmp/HRSID/HRSID_png
+)
+
 # ===== Base args: copied from train.sh, unchanged =====
 BASE_ARGS=(
   --modelname dab_deformable_detr
@@ -72,9 +79,10 @@ run_eval_tta() {
   echo "[Ablation][Eval-TTA] ${exp_dir_name}"
   echo "Checkpoint: ${ckpt}"
   echo "Output: ${out_dir}"
+  echo "Resume config sync: ON (default in main.py)"
 
   "${PYTHON_BIN}" "${MAIN_FILE}" \
-    "${BASE_ARGS[@]}" \
+    "${RESUME_REQUIRED_ARGS[@]}" \
     --eval \
     --resume "${ckpt}" \
     --output_dir "${out_dir}" \
@@ -100,9 +108,10 @@ run_resume() {
   echo "[Ablation][Resume] ${exp_dir_name}"
   echo "Checkpoint: ${ckpt}"
   echo "Output: ${out_dir}"
+  echo "Resume config sync: ON (disable via --no_resume_config_sync)"
 
   "${PYTHON_BIN}" "${MAIN_FILE}" \
-    "${BASE_ARGS[@]}" \
+    "${RESUME_REQUIRED_ARGS[@]}" \
     --resume "${ckpt}" \
     --output_dir "${out_dir}" \
     "${extra_args[@]}"
@@ -119,9 +128,10 @@ Low-budget 5-group ablation set:
 
 Optional (not counted in 5 groups):
   resume <exp_dir_name> [extra args]
-  Example: bash tools/run_ablation_table.sh resume exp04_full --epochs 120
+    Example: bash tools/run_ablation_table.sh resume exp04_full --epochs 120
+    Note: resume mode restores previous args from checkpoint in main.py.
   eval_tta <exp_dir_name>
-  Example: bash tools/run_ablation_table.sh eval_tta exp04_full
+    Example: bash tools/run_ablation_table.sh eval_tta exp04_full
 EOF
 }
 

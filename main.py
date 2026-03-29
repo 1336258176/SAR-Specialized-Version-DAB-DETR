@@ -151,6 +151,9 @@ def get_args_parser():
     parser.add_argument('--device', default='cuda', help='device to use for training / testing')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
+    parser.add_argument('--no_resume_config_sync', dest='resume_config_sync', action='store_false',
+                        help='Disable auto-sync of runtime args from resume checkpoint args.')
+    parser.set_defaults(resume_config_sync=True)
     parser.add_argument('--pretrain_model_path', help='load from other checkpoint')
     parser.add_argument('--finetune_ignore', type=str, nargs='+', 
                         help="A list of keywords to ignore when loading pretrained models.")
@@ -256,9 +259,80 @@ def _set_backbone_trainable(model, base_backbone_flags: Dict[str, bool], is_trai
         if "backbone" in name and base_backbone_flags.get(name, False):
             param.requires_grad = is_trainable
 
+
+def _load_checkpoint(path_or_url: str):
+    if path_or_url.startswith('https'):
+        return torch.hub.load_state_dict_from_url(path_or_url, map_location='cpu', check_hash=True)
+    return torch.load(path_or_url, map_location='cpu')
+
+
+def _extract_cli_override_keys(argv):
+    keys = set()
+    short_map = {
+        "-m": "modelname",
+    }
+    for token in argv:
+        if token in short_map:
+            keys.add(short_map[token])
+            continue
+        if token.startswith("--"):
+            opt = token[2:].split("=", 1)[0].replace("-", "_")
+            keys.add(opt)
+    return keys
+
+
+def _sync_args_from_resume_checkpoint(args, argv):
+    if not args.resume or not args.resume_config_sync:
+        return args, None, []
+
+    checkpoint = _load_checkpoint(args.resume)
+    checkpoint_args = checkpoint.get("args", None)
+    if checkpoint_args is None:
+        return args, checkpoint, []
+
+    if isinstance(checkpoint_args, argparse.Namespace):
+        checkpoint_args_dict = vars(checkpoint_args)
+    elif isinstance(checkpoint_args, dict):
+        checkpoint_args_dict = checkpoint_args
+    else:
+        return args, checkpoint, []
+
+    cli_overrides = _extract_cli_override_keys(argv)
+    protected_keys = {
+        "resume",
+        "resume_config_sync",
+        "output_dir",
+        "eval",
+        "device",
+        "world_size",
+        "rank",
+        "local_rank",
+        "dist_url",
+        "num_workers",
+        "debug",
+        "find_unused_params",
+        "save_log",
+        "save_results",
+        "start_epoch",
+        "note",
+    }
+
+    synced_keys = []
+    for key, value in checkpoint_args_dict.items():
+        if key in protected_keys or key in cli_overrides:
+            continue
+        if not hasattr(args, key):
+            continue
+        setattr(args, key, value)
+        synced_keys.append(key)
+
+    return args, checkpoint, synced_keys
+
 def main(args):
     utils.init_distributed_mode(args)
     # torch.autograd.set_detect_anomaly(True)
+
+    args, resume_checkpoint, synced_keys = _sync_args_from_resume_checkpoint(args, sys.argv[1:])
     
     # setup logger
     os.makedirs(args.output_dir, exist_ok=True)
@@ -266,6 +340,11 @@ def main(args):
     logger = setup_logger(output=os.path.join(args.output_dir, 'info.txt'), distributed_rank=args.rank, color=False, name="DAB-DETR")
     logger.info("git:\n  {}\n".format(utils.get_sha()))
     logger.info("Command: "+' '.join(sys.argv))
+    if synced_keys:
+        logger.info(
+            "Resume config sync: loaded %d args from checkpoint config (CLI args kept priority).",
+            len(synced_keys)
+        )
     if args.rank == 0:
         save_json_path = os.path.join(args.output_dir, "config.json")
         # print("args:", vars(args))
@@ -358,11 +437,7 @@ def main(args):
 
     output_dir = Path(args.output_dir)
     if args.resume:
-        if args.resume.startswith('https'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                args.resume, map_location='cpu', check_hash=True)
-        else:
-            checkpoint = torch.load(args.resume, map_location='cpu')
+        checkpoint = resume_checkpoint if resume_checkpoint is not None else _load_checkpoint(args.resume)
         model_without_ddp.load_state_dict(checkpoint['model'])
         if ema_m is not None and checkpoint.get('ema_model', None) is not None:
             ema_m.module.load_state_dict(checkpoint['ema_model'])
