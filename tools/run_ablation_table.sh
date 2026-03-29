@@ -9,6 +9,7 @@ set -euo pipefail
 #   bash tools/run_ablation_table.sh baseline
 #   bash tools/run_ablation_table.sh sar_data
 #   bash tools/run_ablation_table.sh full
+#   bash tools/run_ablation_table.sh resume exp04_full
 #
 # Notes:
 # - Default uses `python` to keep consistency with train.sh.
@@ -25,7 +26,7 @@ BASE_ARGS=(
   --dataset_class HRSID
   --coco_path ../autodl-tmp/HRSID/HRSID_png
   --batch_size 4
-  --epochs 50
+  --epochs 100
   --lr 1e-4
   --lr_backbone 1e-5
   --lr_T_max 100
@@ -33,7 +34,7 @@ BASE_ARGS=(
   --focal_alpha 0.2
   --bbox_loss_coef 6
   --giou_loss_coef 3
-  --save_checkpoint_interval 20
+  --save_checkpoint_interval 30
   --device cuda
   --save_log
   --pretrain_model_path ../model_zoo/DAB_Deformable_DETR/R50/checkpoint.pth
@@ -84,6 +85,29 @@ run_eval_tta() {
     --tta_topk 100
 }
 
+run_resume() {
+  local exp_dir_name="$1"
+  shift
+  local extra_args=("$@")
+  local ckpt="${ROOT_OUT}/${exp_dir_name}/checkpoint.pth"
+  local out_dir="${ROOT_OUT}/${exp_dir_name}"
+
+  if [[ ! -f "${ckpt}" ]]; then
+    echo "[Ablation][Resume] checkpoint not found: ${ckpt}"
+    exit 1
+  fi
+
+  echo "[Ablation][Resume] ${exp_dir_name}"
+  echo "Checkpoint: ${ckpt}"
+  echo "Output: ${out_dir}"
+
+  "${PYTHON_BIN}" "${MAIN_FILE}" \
+    "${BASE_ARGS[@]}" \
+    --resume "${ckpt}" \
+    --output_dir "${out_dir}" \
+    "${extra_args[@]}"
+}
+
 show_plan() {
   cat << 'EOF'
 Low-budget 5-group ablation set:
@@ -94,6 +118,8 @@ Low-budget 5-group ablation set:
   exp04_full        : Recommended full lightweight combo (E + A + C + B + F)
 
 Optional (not counted in 5 groups):
+  resume <exp_dir_name> [extra args]
+  Example: bash tools/run_ablation_table.sh resume exp04_full --epochs 120
   eval_tta <exp_dir_name>
   Example: bash tools/run_ablation_table.sh eval_tta exp04_full
 EOF
@@ -172,6 +198,15 @@ case "${cmd}" in
       exit 1
     fi
     run_eval_tta "$2"
+    ;;
+
+  resume)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: bash tools/run_ablation_table.sh resume <exp_dir_name> [extra args]"
+      echo "Example: bash tools/run_ablation_table.sh resume exp04_full --epochs 120"
+      exit 1
+    fi
+    run_resume "$2" "${@:3}"
     ;;
 
   all)
