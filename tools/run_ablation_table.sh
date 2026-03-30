@@ -50,6 +50,20 @@ BASE_ARGS=(
 
 ROOT_OUT="output/dab_deformable_detr/ablation_table_2026_lite"
 
+# Tuned SAR data augmentation bundle (more conservative than the previous setup).
+SAR_DATA_ARGS=(
+  --enable_sar_vertical_flip
+  --sar_vertical_flip_prob 0.2
+  --enable_sar_speckle_aug
+  --sar_speckle_prob 0.15
+  --sar_speckle_min_std 0.01
+  --sar_speckle_max_std 0.05
+  --enable_sar_contrast_stretch
+  --sar_contrast_stretch_prob 0.15
+  --sar_contrast_stretch_lower_q 0.05
+  --sar_contrast_stretch_upper_q 0.95
+)
+
 run_train() {
   local exp_id="$1"
   local exp_name="$2"
@@ -146,17 +160,7 @@ case "${cmd}" in
     ;;
 
   sar_data|exp01_sar_data)
-    run_train exp01 sar_data \
-      --enable_sar_vertical_flip \
-      --sar_vertical_flip_prob 0.5 \
-      --enable_sar_speckle_aug \
-      --sar_speckle_prob 0.35 \
-      --sar_speckle_min_std 0.02 \
-      --sar_speckle_max_std 0.10 \
-      --enable_sar_contrast_stretch \
-      --sar_contrast_stretch_prob 0.35 \
-      --sar_contrast_stretch_lower_q 0.02 \
-      --sar_contrast_stretch_upper_q 0.98
+    run_train exp01 sar_data "${SAR_DATA_ARGS[@]}"
     ;;
 
   model_stab|exp02_model_stab)
@@ -179,16 +183,7 @@ case "${cmd}" in
 
   full|exp04_full)
     run_train exp04 full \
-      --enable_sar_vertical_flip \
-      --sar_vertical_flip_prob 0.5 \
-      --enable_sar_speckle_aug \
-      --sar_speckle_prob 0.35 \
-      --sar_speckle_min_std 0.02 \
-      --sar_speckle_max_std 0.10 \
-      --enable_sar_contrast_stretch \
-      --sar_contrast_stretch_prob 0.35 \
-      --sar_contrast_stretch_lower_q 0.02 \
-      --sar_contrast_stretch_upper_q 0.98 \
+      "${SAR_DATA_ARGS[@]}" \
       --enable_ema \
       --ema_decay 0.9997 \
       --use_ema_for_eval \
@@ -221,17 +216,7 @@ case "${cmd}" in
 
   all)
     run_train exp00 baseline
-    run_train exp01 sar_data \
-      --enable_sar_vertical_flip \
-      --sar_vertical_flip_prob 0.5 \
-      --enable_sar_speckle_aug \
-      --sar_speckle_prob 0.35 \
-      --sar_speckle_min_std 0.02 \
-      --sar_speckle_max_std 0.10 \
-      --enable_sar_contrast_stretch \
-      --sar_contrast_stretch_prob 0.35 \
-      --sar_contrast_stretch_lower_q 0.02 \
-      --sar_contrast_stretch_upper_q 0.98
+    run_train exp01 sar_data "${SAR_DATA_ARGS[@]}"
     run_train exp02 model_stab \
       --enable_ema \
       --ema_decay 0.9997 \
@@ -245,16 +230,7 @@ case "${cmd}" in
       --enable_sar_shape_prior_loss \
       --sar_shape_prior_loss_coef 0.3
     run_train exp04 full \
-      --enable_sar_vertical_flip \
-      --sar_vertical_flip_prob 0.5 \
-      --enable_sar_speckle_aug \
-      --sar_speckle_prob 0.35 \
-      --sar_speckle_min_std 0.02 \
-      --sar_speckle_max_std 0.10 \
-      --enable_sar_contrast_stretch \
-      --sar_contrast_stretch_prob 0.35 \
-      --sar_contrast_stretch_lower_q 0.02 \
-      --sar_contrast_stretch_upper_q 0.98 \
+      "${SAR_DATA_ARGS[@]}" \
       --enable_ema \
       --ema_decay 0.9997 \
       --use_ema_for_eval \
