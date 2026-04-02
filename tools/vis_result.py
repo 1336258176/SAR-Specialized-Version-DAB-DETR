@@ -3,13 +3,13 @@ Extract academic CV metrics from DAB-DETR style log.txt files and generate
 clean, publication-oriented plots.
 
 Usage:
-    python tools/plots/academic_plot_from_logs.py \
-        --logs output/exp1/log.txt output/exp2/log.txt \
-        --output_dir tools/plots/paper_figures
+    python tools/plots/vis_result.py \
+        -i output/exp1/log.txt output/exp2/log.txt \
+        -o tools/plots/paper_figures
 
-    python tools/plots/academic_plot_from_logs.py \
-        --logs Baseline=output/a/log.txt Ours=output/b/log.txt \
-        --output_dir tools/plots/paper_figures
+    python tools/plots/vis_result.py \
+        -i Baseline=output/a/log.txt Ours=output/b/log.txt \
+        -o tools/plots/paper_figures
 """
 
 import argparse
@@ -158,6 +158,8 @@ def summarize_experiment(exp: Dict) -> Dict:
         "num_epochs": len(records),
         "best_epoch_by_AP": best_epoch,
         "best_AP": best_ap,
+        # mAP in COCO-style logs is AP@[.5:.95], keep an explicit alias for clarity.
+        "best_mAP": best_ap,
         "final_epoch": final_record.get("epoch"),
         "final_train_loss": final_record.get("train_loss"),
         "final_val_loss": final_record.get("test_loss"),
@@ -165,6 +167,12 @@ def summarize_experiment(exp: Dict) -> Dict:
         "epoch_time": final_record.get("epoch_time"),
         "n_parameters": final_record.get("n_parameters"),
     }
+
+    final_metrics = final_record.get("test_coco_eval_bbox")
+    if final_metrics is not None and len(final_metrics) > KEY_METRICS["AP"]:
+        summary["final_mAP"] = final_metrics[KEY_METRICS["AP"]]
+    else:
+        summary["final_mAP"] = None
 
     for metric_name, metric_idx in KEY_METRICS.items():
         metrics = best_record.get("test_coco_eval_bbox")
@@ -189,6 +197,31 @@ def save_summary(experiments: List[Dict], output_dir: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(summaries)
+
+
+def save_map_history(experiments: List[Dict], output_dir: Path) -> None:
+    """
+    Save per-epoch mAP/AP50/AP75 history for each experiment.
+    mAP here follows COCO AP@[.5:.95].
+    """
+    csv_path = output_dir / "map_history.csv"
+    fieldnames = ["name", "epoch", "mAP", "AP50", "AP75"]
+    with csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for exp in experiments:
+            for item in exp["records"]:
+                metrics = item.get("test_coco_eval_bbox")
+                if metrics is None:
+                    continue
+                row = {
+                    "name": exp["name"],
+                    "epoch": item.get("epoch"),
+                    "mAP": metrics[0] if len(metrics) > 0 else None,
+                    "AP50": metrics[1] if len(metrics) > 1 else None,
+                    "AP75": metrics[2] if len(metrics) > 2 else None,
+                }
+                writer.writerow(row)
 
 
 def format_axes(ax, xlabel: str = "Epoch", ylabel: str = "") -> None:
@@ -333,7 +366,8 @@ def print_console_summary(experiments: List[Dict]) -> None:
     for item in summaries:
         print(
             f"{item['name']}: "
-            f"best AP={item.get('best_AP', 0):.4f}, "
+            f"best mAP={item.get('best_mAP', 0):.4f}, "
+            f"final mAP={item.get('final_mAP', 0):.4f}, "
             f"AP50={item.get('best_AP50', 0):.4f}, "
             f"AP75={item.get('best_AP75', 0):.4f}, "
             f"best epoch={item.get('best_epoch_by_AP')}"
@@ -355,6 +389,7 @@ def main():
     set_paper_style()
     experiments = build_experiments(args.logs)
     save_summary(experiments, output_dir)
+    save_map_history(experiments, output_dir)
     plot_learning_curves(experiments, output_dir)
     plot_detection_metrics(experiments, output_dir)
     plot_best_metric_bars(experiments, output_dir)
