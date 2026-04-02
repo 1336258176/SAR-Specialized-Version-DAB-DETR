@@ -300,6 +300,50 @@ def plot_detection_metrics(experiments: List[Dict], output_dir: Path) -> None:
     save_figure(fig, output_dir, "detection_metrics", rect=(0.0, 0.0, 1.0, 0.94))
 
 
+def plot_recall_metrics(experiments: List[Dict], output_dir: Path) -> None:
+    """
+    Plot recall-centric curves while preserving the existing visual style.
+    """
+    colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
+    fig, axes = plt.subplots(2, 3, figsize=(12.8, 7.6))
+    axes = axes.ravel()
+    panels = [("AR1", 6), ("AR10", 7), ("AR100", 8), ("ARs", 9), ("ARm", 10), ("ARl", 11)]
+
+    for exp_idx, exp in enumerate(experiments):
+        color = colors[exp_idx % len(colors)]
+        for ax, (title, metric_idx) in zip(axes, panels):
+            xs, ys = extract_coco_metric(exp["records"], metric_idx)
+            if xs:
+                ax.plot(xs, ys, color=color, label=exp["name"], marker="o", markevery=max(1, len(xs) // 10))
+            ax.set_title(title)
+            format_axes(ax, ylabel=title)
+
+    add_shared_legend(fig, axes, len(experiments))
+    save_figure(fig, output_dir, "recall_metrics", rect=(0.0, 0.0, 1.0, 0.94))
+
+
+def plot_coco_full_metrics(experiments: List[Dict], output_dir: Path) -> None:
+    """
+    Plot all COCO bbox metrics in a single 12-panel figure.
+    """
+    colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
+    fig, axes = plt.subplots(3, 4, figsize=(15.2, 9.4))
+    axes = axes.ravel()
+
+    for exp_idx, exp in enumerate(experiments):
+        color = colors[exp_idx % len(colors)]
+        for metric_idx, metric_name in enumerate(COCO_METRIC_NAMES):
+            ax = axes[metric_idx]
+            xs, ys = extract_coco_metric(exp["records"], metric_idx)
+            if xs:
+                ax.plot(xs, ys, color=color, label=exp["name"], marker="o", markevery=max(1, len(xs) // 10))
+            ax.set_title(metric_name)
+            format_axes(ax, ylabel=metric_name)
+
+    add_shared_legend(fig, axes, len(experiments))
+    save_figure(fig, output_dir, "coco_full_metrics", rect=(0.0, 0.0, 1.0, 0.95))
+
+
 def plot_best_metric_bars(experiments: List[Dict], output_dir: Path) -> None:
     summaries = [summarize_experiment(exp) for exp in experiments]
     metric_names = ["best_AP", "best_AP50", "best_AP75", "best_AR100"]
@@ -392,6 +436,8 @@ def main():
     save_map_history(experiments, output_dir)
     plot_learning_curves(experiments, output_dir)
     plot_detection_metrics(experiments, output_dir)
+    plot_recall_metrics(experiments, output_dir)
+    plot_coco_full_metrics(experiments, output_dir)
     plot_best_metric_bars(experiments, output_dir)
     plot_scale_sensitivity(experiments, output_dir)
     print_console_summary(experiments)
