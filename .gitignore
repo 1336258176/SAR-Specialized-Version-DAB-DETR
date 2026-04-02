@@ -27,6 +27,8 @@ scripts/
 models/dab_deformable_detr/ops/build/
 models/dab_deformable_detr/ops/dist/
 models/dab_deformable_detr/ops/MultiScaleDeformableAttention.egg-info/
+models/dab_deformable_detr/ops/MultiScaleDeformableAttention.cpython-38-x86_64-linux-gnu.so
+MultiScaleDeformableAttention.cpython-38-x86_64-linux-gnu.so
 output/
 pth/
 tools/plots/
