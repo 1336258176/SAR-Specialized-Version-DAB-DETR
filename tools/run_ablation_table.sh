@@ -7,7 +7,7 @@ set -euo pipefail
 # Usage:
 #   bash tools/run_ablation_table.sh all
 #   bash tools/run_ablation_table.sh baseline
-#   bash tools/run_ablation_table.sh sar_data
+#   bash tools/run_ablation_table.sh query_init
 #   bash tools/run_ablation_table.sh full
 #   bash tools/run_ablation_table.sh resume exp04_full
 #
@@ -49,20 +49,6 @@ BASE_ARGS=(
 )
 
 ROOT_OUT="output/dab_deformable_detr/ablation_table_2026_lite"
-
-# Tuned SAR data augmentation bundle (more conservative than the previous setup).
-SAR_DATA_ARGS=(
-  --enable_sar_vertical_flip
-  --sar_vertical_flip_prob 0.2
-  --enable_sar_speckle_aug
-  --sar_speckle_prob 0.15
-  --sar_speckle_min_std 0.01
-  --sar_speckle_max_std 0.05
-  --enable_sar_contrast_stretch
-  --sar_contrast_stretch_prob 0.15
-  --sar_contrast_stretch_lower_q 0.05
-  --sar_contrast_stretch_upper_q 0.95
-)
 
 run_train() {
   local exp_id="$1"
@@ -135,10 +121,10 @@ show_plan() {
   cat << 'EOF'
 Low-budget 5-group ablation set:
   exp00_baseline    : Baseline (no new module)
-  exp01_sar_data    : Data-level SAR augmentation bundle (E)
+  exp01_query_init  : Saliency-guided query initialization (G)
   exp02_model_stab  : Model/training stabilization bundle (A + C)
   exp03_loss_sar    : Loss-level SAR geometry bundle (B + F)
-  exp04_full        : Recommended full lightweight combo (E + A + C + B + F)
+  exp04_full        : Recommended full lightweight combo (G + A + C + B + F)
 
 Optional (not counted in 5 groups):
   resume <exp_dir_name> [extra args]
@@ -159,8 +145,11 @@ case "${cmd}" in
     run_train exp00 baseline
     ;;
 
-  sar_data|exp01_sar_data)
-    run_train exp01 sar_data "${SAR_DATA_ARGS[@]}"
+  query_init|exp01_query_init)
+    run_train exp01 query_init \
+      --enable_saliency_query_init \
+      --saliency_query_feature_level 0 \
+      --saliency_highpass_radius_ratio 0.15
     ;;
 
   model_stab|exp02_model_stab)
@@ -183,7 +172,9 @@ case "${cmd}" in
 
   full|exp04_full)
     run_train exp04 full \
-      "${SAR_DATA_ARGS[@]}" \
+      --enable_saliency_query_init \
+      --saliency_query_feature_level 0 \
+      --saliency_highpass_radius_ratio 0.15 \
       --enable_ema \
       --ema_decay 0.9997 \
       --use_ema_for_eval \
@@ -216,7 +207,10 @@ case "${cmd}" in
 
   all)
     run_train exp00 baseline
-    run_train exp01 sar_data "${SAR_DATA_ARGS[@]}"
+    run_train exp01 query_init \
+      --enable_saliency_query_init \
+      --saliency_query_feature_level 0 \
+      --saliency_highpass_radius_ratio 0.15
     run_train exp02 model_stab \
       --enable_ema \
       --ema_decay 0.9997 \
@@ -230,7 +224,9 @@ case "${cmd}" in
       --enable_sar_shape_prior_loss \
       --sar_shape_prior_loss_coef 0.3
     run_train exp04 full \
-      "${SAR_DATA_ARGS[@]}" \
+      --enable_saliency_query_init \
+      --saliency_query_feature_level 0 \
+      --saliency_highpass_radius_ratio 0.15 \
       --enable_ema \
       --ema_decay 0.9997 \
       --use_ema_for_eval \

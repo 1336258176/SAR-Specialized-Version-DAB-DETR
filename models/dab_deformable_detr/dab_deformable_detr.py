@@ -42,6 +42,9 @@ class DABDeformableDETR(nn.Module):
                  use_dab=True,
                  num_patterns=0,
                  random_refpoints_xy=False,
+                 enable_saliency_query_init=False,
+                 saliency_query_feature_level=0,
+                 saliency_highpass_radius_ratio=0.15,
                  ):
         """ Initializes the model.
         Parameters:
@@ -67,6 +70,10 @@ class DABDeformableDETR(nn.Module):
         self.use_dab = use_dab
         self.num_patterns = num_patterns
         self.random_refpoints_xy = random_refpoints_xy
+        self.enable_saliency_query_init = enable_saliency_query_init
+        self.saliency_query_feature_level = saliency_query_feature_level
+        self.saliency_highpass_radius_ratio = saliency_highpass_radius_ratio
+        self._saliency_eps = 1e-6
 
         if not two_stage:
             if not use_dab:
@@ -140,6 +147,79 @@ class DABDeformableDETR(nn.Module):
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
+    def _phase_alignment(self, phase_sin, phase_cos):
+        magnitude = torch.sqrt(phase_sin ** 2 + phase_cos ** 2 + self._saliency_eps)
+        phase_sin = phase_sin / magnitude
+        phase_cos = phase_cos / magnitude
+        return phase_sin, phase_cos
+
+    def _build_fft_saliency_map(self, src, mask):
+        # Borrowed core frequency-preserving logic from DenoDet-style FFT branch:
+        # FFT -> amplitude/phase decomposition -> phase alignment -> IFFT.
+        freq = torch.fft.fft2(src, dim=(-2, -1))
+        freq = torch.fft.fftshift(freq, dim=(-2, -1))
+
+        amplitude = torch.abs(freq)
+        phase = torch.angle(freq)
+        phase_sin, phase_cos = self._phase_alignment(phase.sin(), phase.cos())
+
+        preserved = amplitude * phase_cos + 1j * amplitude * phase_sin
+        preserved = torch.fft.ifftshift(preserved, dim=(-2, -1))
+        recon = torch.fft.ifft2(preserved, dim=(-2, -1)).real
+        recon = F.relu(recon)
+
+        # DenoDet attention style uses mean+max cues.
+        saliency = recon.mean(1) + recon.max(1)[0]
+
+        # Optional high-pass branch to keep bright sparse responses.
+        ratio = float(self.saliency_highpass_radius_ratio)
+        if ratio > 0:
+            _, _, h, w = src.shape
+            yy = torch.linspace(-1.0, 1.0, h, device=src.device, dtype=src.dtype).view(1, 1, h, 1)
+            xx = torch.linspace(-1.0, 1.0, w, device=src.device, dtype=src.dtype).view(1, 1, 1, w)
+            radial = torch.sqrt(yy * yy + xx * xx)
+            highpass_mask = (radial >= ratio).to(src.dtype)
+            hf_freq = freq * highpass_mask
+            hf_recon = torch.fft.ifft2(torch.fft.ifftshift(hf_freq, dim=(-2, -1)), dim=(-2, -1)).real
+            hf_recon = F.relu(hf_recon)
+            saliency = saliency + hf_recon.mean(1) + hf_recon.max(1)[0]
+
+        if mask is not None:
+            saliency = saliency.masked_fill(mask, float("-inf"))
+        return saliency
+
+    def _build_saliency_query_embeds(self, src, mask):
+        bs, _, h, w = src.shape
+        nq = self.num_queries
+
+        saliency = self._build_fft_saliency_map(src, mask)  # [B, H, W]
+        flat = saliency.flatten(1)  # [B, H*W]
+        k = min(nq, flat.shape[1])
+        topk_idx = flat.topk(k, dim=1).indices
+        if k < nq:
+            repeat_factor = (nq + k - 1) // k
+            topk_idx = topk_idx.repeat(1, repeat_factor)[:, :nq]
+
+        y_idx = topk_idx // w
+        x_idx = topk_idx % w
+
+        if mask is not None:
+            valid_h = (~mask[:, :, 0]).sum(1).clamp(min=1).float()
+            valid_w = (~mask[:, 0, :]).sum(1).clamp(min=1).float()
+            x_norm = (x_idx.float() + 0.5) / valid_w[:, None]
+            y_norm = (y_idx.float() + 0.5) / valid_h[:, None]
+        else:
+            x_norm = (x_idx.float() + 0.5) / float(w)
+            y_norm = (y_idx.float() + 0.5) / float(h)
+
+        xy = torch.stack([x_norm, y_norm], dim=-1).clamp(self._saliency_eps, 1.0 - self._saliency_eps)
+        wh = self.refpoint_embed.weight.sigmoid()[:, 2:].unsqueeze(0).expand(bs, -1, -1)
+        wh = wh.clamp(self._saliency_eps, 1.0 - self._saliency_eps)
+        ref_unact = inverse_sigmoid(torch.cat([xy, wh], dim=-1))
+
+        tgt_embed = self.tgt_embed.weight.unsqueeze(0).expand(bs, -1, -1)
+        return torch.cat([tgt_embed, ref_unact], dim=-1)
+
     def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
@@ -187,18 +267,34 @@ class DABDeformableDETR(nn.Module):
             query_embeds = None
         elif self.use_dab:
             if self.num_patterns == 0:
-                tgt_embed = self.tgt_embed.weight           # nq, 256
-                refanchor = self.refpoint_embed.weight      # nq, 4
-                query_embeds = torch.cat((tgt_embed, refanchor), dim=1)
+                if self.enable_saliency_query_init:
+                    saliency_level = min(max(int(self.saliency_query_feature_level), 0), len(srcs) - 1)
+                    query_embeds = self._build_saliency_query_embeds(srcs[saliency_level], masks[saliency_level])  # bs, nq, 260
+                else:
+                    tgt_embed = self.tgt_embed.weight           # nq, 256
+                    refanchor = self.refpoint_embed.weight      # nq, 4
+                    query_embeds = torch.cat((tgt_embed, refanchor), dim=1)
             else:
                 # multi patterns
-                tgt_embed = self.tgt_embed.weight           # nq, 256
-                pat_embed = self.patterns_embed.weight      # num_pat, 256
-                tgt_embed = tgt_embed.repeat(self.num_patterns, 1) # nq*num_pat, 256
-                pat_embed = pat_embed[:, None, :].repeat(1, self.num_queries, 1).flatten(0, 1) # nq*num_pat, 256
-                tgt_all_embed = tgt_embed + pat_embed
-                refanchor = self.refpoint_embed.weight.repeat(self.num_patterns, 1)      # nq*num_pat, 4
-                query_embeds = torch.cat((tgt_all_embed, refanchor), dim=1)
+                if self.enable_saliency_query_init:
+                    saliency_level = min(max(int(self.saliency_query_feature_level), 0), len(srcs) - 1)
+                    base_query = self._build_saliency_query_embeds(srcs[saliency_level], masks[saliency_level])  # bs, nq, 260
+                    d_model = self.transformer.d_model
+                    tgt_embed = base_query[..., :d_model]         # bs, nq, 256
+                    refanchor = base_query[..., d_model:]         # bs, nq, 4
+                    pat_embed = self.patterns_embed.weight[None, :, None, :]  # 1, num_pat, 1, 256
+                    tgt_embed = tgt_embed[:, None, :, :] + pat_embed           # bs, num_pat, nq, 256
+                    tgt_embed = tgt_embed.flatten(1, 2)                        # bs, nq*num_pat, 256
+                    refanchor = refanchor[:, None, :, :].repeat(1, self.num_patterns, 1, 1).flatten(1, 2)
+                    query_embeds = torch.cat((tgt_embed, refanchor), dim=-1)   # bs, nq*num_pat, 260
+                else:
+                    tgt_embed = self.tgt_embed.weight           # nq, 256
+                    pat_embed = self.patterns_embed.weight      # num_pat, 256
+                    tgt_embed = tgt_embed.repeat(self.num_patterns, 1) # nq*num_pat, 256
+                    pat_embed = pat_embed[:, None, :].repeat(1, self.num_queries, 1).flatten(0, 1) # nq*num_pat, 256
+                    tgt_all_embed = tgt_embed + pat_embed
+                    refanchor = self.refpoint_embed.weight.repeat(self.num_patterns, 1)      # nq*num_pat, 4
+                    query_embeds = torch.cat((tgt_all_embed, refanchor), dim=1)
         else:
             query_embeds = self.query_embed.weight
         hs, init_reference, inter_references, enc_outputs_class, enc_outputs_coord_unact = self.transformer(srcs, masks, pos, query_embeds)
@@ -548,7 +644,10 @@ def build_dab_deformable_detr(args):
         two_stage=args.two_stage,
         use_dab=True,
         num_patterns=args.num_patterns,
-        random_refpoints_xy=args.random_refpoints_xy
+        random_refpoints_xy=args.random_refpoints_xy,
+        enable_saliency_query_init=getattr(args, "enable_saliency_query_init", False),
+        saliency_query_feature_level=getattr(args, "saliency_query_feature_level", 0),
+        saliency_highpass_radius_ratio=getattr(args, "saliency_highpass_radius_ratio", 0.15),
     )
     if args.masks:
         model = DETRsegm(model, freeze_detr=(args.frozen_weights is not None))

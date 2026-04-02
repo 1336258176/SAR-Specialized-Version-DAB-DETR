@@ -189,9 +189,15 @@ class DeformableTransformer(nn.Module):
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
             query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
         elif self.use_dab:
-            reference_points = query_embed[..., self.d_model:].sigmoid() 
-            tgt = query_embed[..., :self.d_model]
-            tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            if query_embed.dim() == 2:
+                reference_points = query_embed[..., self.d_model:].sigmoid()
+                tgt = query_embed[..., :self.d_model]
+                tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            else:
+                assert query_embed.dim() == 3
+                assert query_embed.shape[0] == bs
+                reference_points = query_embed[..., self.d_model:].sigmoid()
+                tgt = query_embed[..., :self.d_model]
             init_reference_out = reference_points
         else:
             query_embed, tgt = torch.split(query_embed, c, dim=1)
@@ -383,7 +389,11 @@ class DeformableTransformerDecoder(nn.Module):
         if self.use_dab:
             assert query_pos is None
         bs = src.shape[0]
-        reference_points = reference_points[None].repeat(bs, 1, 1) # bs, nq, 4(xywh)
+        if reference_points.dim() == 2:
+            reference_points = reference_points[None].repeat(bs, 1, 1) # bs, nq, 4(xywh)
+        else:
+            assert reference_points.dim() == 3
+            assert reference_points.shape[0] == bs
 
 
         intermediate = []

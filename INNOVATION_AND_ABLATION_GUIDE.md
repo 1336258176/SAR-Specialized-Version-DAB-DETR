@@ -110,44 +110,7 @@ SAR 舰船尺度变化大，多尺度推理可提高召回。
 
 ---
 
-## 2.5 创新点 E：SAR 专用数据增强模块（方向与散斑特性）
-### 动机
-SAR 舰船目标具有两类显著特征：
-- 方位分布不固定，目标上下方向具有随机性；
-- 成像存在乘性散斑噪声，且不同场景对比度分布差异明显。
-
-因此新增 SAR 专用增强模块，提升对方向变化、散斑扰动和灰度动态范围变化的鲁棒性。
-
-### 实现位置
-- `datasets/transforms.py`
-- `datasets/coco.py`
-- `main.py`（新增启动参数）
-
-### 已实现模块
-1. 随机垂直翻转（`RandomVerticalFlip`）  
-2. 乘性散斑噪声增强（`SARSpeckleNoise`）  
-3. 百分位对比度拉伸（`SARContrastStretch`）  
-
-### 启停参数（`main.py`）
-- `--enable_sar_vertical_flip`
-- `--sar_vertical_flip_prob`
-- `--enable_sar_speckle_aug`
-- `--sar_speckle_prob`
-- `--sar_speckle_min_std`
-- `--sar_speckle_max_std`
-- `--enable_sar_contrast_stretch`
-- `--sar_contrast_stretch_prob`
-- `--sar_contrast_stretch_lower_q`
-- `--sar_contrast_stretch_upper_q`
-
-### 参考论文
-- HRSID 数据集（SAR 舰船场景背景）：https://doi.org/10.1109/ACCESS.2020.3005861  
-- Speckle 乘性噪声经典建模（SAR）：https://doi.org/10.1016/S0146-664X(81)80005-6  
-- SAR speckle 教程综述：https://doi.org/10.1109/MGRS.2013.2277512  
-
----
-
-## 2.6 创新点 F：SAR 舰船形状先验损失（长宽比约束）
+## 2.5 创新点 F：SAR 舰船形状先验损失（长宽比约束）
 ### 动机
 舰船在 SAR 图像中常呈现细长结构。仅使用 L1 + GIoU 时，模型对“长宽比结构”学习不够显式。  
 新增 `loss_shape`，对匹配框的 `log(w/h)` 进行约束，强化舰船几何形状学习。
@@ -174,6 +137,49 @@ SAR 舰船目标具有两类显著特征：
 
 ---
 
+## 2.6 创新点 G：频域显著信号保留引导的 Query 初始化（DAB-Deformable 专用）
+### 动机
+在 DAB-Deformable-DETR 中，默认 `refpoint_embed` 为全局可学习参数，与当前图像内容弱耦合。  
+针对 SAR 中“亮斑目标 + 稀疏背景”特性，引入频域显著性引导，让初始 query 坐标更靠近高响应区域，以加快收敛并改善定位精度。
+
+### 参考与借鉴来源
+- 论文：TransDeno（你指定）：https://arxiv.org/abs/2406.02833
+- DenoDet/GrokSAR 公开实现（借鉴“显著信号保留”的频域处理逻辑）：
+  - `GrokSAR/groksar/models/backbones/FFTresnet.py` 中 `FFTTransformerattentionlayer`
+  - 核心流程：`FFT -> 幅相分解 -> 相位对齐 -> IFFT -> ReLU`
+
+### 实现位置
+- `models/dab_deformable_detr/dab_deformable_detr.py`
+- `models/dab_deformable_detr/deformable_transformer.py`
+- `main.py`
+
+### 关键机制
+1. 在 `use_dab=True 且 two_stage=False` 时，新增可选“图像自适应 query 初始化”。  
+2. 从选定特征层（默认 level-0）构建频域显著图：  
+   - `fft2 + fftshift`  
+   - 幅相分解（`amplitude / phase`）  
+   - 相位正余弦归一化对齐（Phase Alignment）  
+   - 复频谱重建后 `ifft2` 回空间域，`ReLU`  
+   - 用 `mean + max` 形成显著性响应（与 DenoDet 注意力构造风格一致）  
+3. 可选高通支路（`saliency_highpass_radius_ratio`）强化亮斑和边缘响应。  
+4. 在有效区域（mask 非 padding）上取 Top-K 响应点，将其映射为 query 初始 `(x, y)`。  
+5. `w,h` 仍沿用原 `refpoint_embed` 的可学习先验，保证与 DAB 迭代框细化兼容。  
+6. 为兼容该改动，transformer 支持 batch 级 query embedding（`[B, Nq, D+4]`）。
+
+### 启停参数（`main.py`）
+- `--enable_saliency_query_init`：开启频域显著引导 query 初始化
+- `--saliency_query_feature_level`：用于生成显著图的特征层索引（默认 `0`）
+- `--saliency_highpass_radius_ratio`：高通半径比例（默认 `0.15`，设为 `0` 可关闭）
+
+### 使用建议
+- 推荐先在 `exp03_loss_sar` 或 `exp04_full` 上追加一组：
+  - `--enable_saliency_query_init`
+- 若训练早期不稳定，可先设置：
+  - `--saliency_highpass_radius_ratio 0`
+  - 再逐步调到 `0.1~0.2`
+
+---
+
 ## 3. 额外工程性修复
 - 在 `engine.py` 的非 AMP 路径补充了 `optimizer.zero_grad()`，避免梯度无意累积导致训练不稳定。
 
@@ -183,22 +189,21 @@ SAR 舰船目标具有两类显著特征：
 考虑到你 GPU 和预算有限，主实验改为仅 5 组（含基线），并将创新点按层级整合，减少实验次数。
 
 分组原则：
-- SAR 相关创新放在一起（E+F）
-- 数据层创新合并成单组（E）
+- Query 初始化单独成组（G）
 - 模型训练层创新合并成单组（A+C）
 - 损失层创新合并成单组（B+F）
 
 最终只保留：
 1. `exp00_baseline`：基线  
-2. `exp01_sar_data`：数据层（E）  
+2. `exp01_query_init`：Query 初始化（G）  
 3. `exp02_model_stab`：模型训练层（A+C）  
 4. `exp03_loss_sar`：损失层（B+F）  
-5. `exp04_full`：全量轻量组合（E+A+C+B+F）  
+5. `exp04_full`：全量轻量组合（G+A+C+B+F）  
 
 `D(TTA)` 不计入这 5 组，仅在最终最优组上额外评估一次。
 
 已从主消融中删除/合并（为节省算力）：
-- 删除 A、B、C、E、F 的逐个单独消融，不再分别占用一次完整训练。
+- 删除 A、B、C、F、G 的逐个单独消融，不再分别占用一次完整训练。
 - 删除多种交叉组合（如 AB、AC、ABC、SAR-only 分裂组），统一折叠进 4 个非基线主组。
 - `TTA` 从训练消融中剥离，仅做最终一次评估补充。
 
@@ -236,18 +241,18 @@ PYTHON_BIN=python3 bash tools/run_ablation_table.sh all
 | 实验ID | 分类 | 实验名 | 模块组合 | 新增参数 |
 |---|---|---|---|---|
 | exp00_baseline | 基线组 | baseline | 无 | 无 |
-| exp01_sar_data | 数据层组（SAR相关） | sar_data | E | `--enable_sar_vertical_flip --enable_sar_speckle_aug --enable_sar_contrast_stretch` |
+| exp01_query_init | Query初始化组 | query_init | G | `--enable_saliency_query_init` |
 | exp02_model_stab | 模型训练层组 | model_stab | A + C | `--enable_ema --use_ema_for_eval --enable_backbone_warmup` |
 | exp03_loss_sar | 损失层组（SAR相关） | loss_sar | B + F | `--enable_small_object_reweight --enable_sar_shape_prior_loss` |
-| exp04_full | 综合组 | full | E + A + C + B + F | 全部整合参数 |
+| exp04_full | 综合组 | full | G + A + C + B + F | 全部整合参数 |
 
 建议在 `exp04_full` 基础上额外执行 `eval_tta`，作为“仅推理阶段增强”的补充结果。
 
 ### 5.4 论文表格模板（建议）
-| Exp | A(EMA) | B(Small) | C(Warmup) | E(SAR Aug) | F(SAR Shape) | D(TTA, eval) | mAP@[.5:.95] | AP50 | AP75 | 参数量(M) | 训练时长(h) |
+| Exp | A(EMA) | B(Small) | C(Warmup) | G(QueryInit) | F(SAR Shape) | D(TTA, eval) | mAP@[.5:.95] | AP50 | AP75 | 参数量(M) | 训练时长(h) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | exp00 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |  |  |  |  |  |
-| exp01_sar_data | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |  |  |  |  |  |
+| exp01_query_init | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |  |  |  |  |  |
 | exp02_model_stab | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ |  |  |  |  |  |
 | exp03_loss_sar | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ |  |  |  |  |  |
 | exp04_full | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |  |  |  |  |  |
@@ -272,7 +277,7 @@ PYTHON_BIN=python3 bash tools/run_ablation_table.sh all
 ### 6.2 推荐的调参顺序
 1. 先跑 5 组固定实验：`exp00` 到 `exp04`。  
 2. 从 `exp04_full` 出发做二阶段微调。  
-3. 先调 SAR 相关：`sar_speckle_prob`、`sar_shape_prior_loss_coef`。  
+3. 先调 Query 初始化相关：`saliency_query_feature_level`、`saliency_highpass_radius_ratio`。  
 4. 再调稳定性相关：`ema_decay`、`backbone_warmup_epochs`。  
 5. 最后只对最优权重做一次 `TTA` 评估。
 
@@ -293,10 +298,10 @@ PYTHON_BIN=python3 bash tools/run_ablation_table.sh all
   - 当前：`scales=1.0,1.15,1.3`
   - 可尝试：`1.0,1.1,1.2`（更快）或 `1.0,1.2,1.4`（更强但更慢）
   - 旁注：`tta_nms_iou_thresh` 建议在 `0.55~0.65` 小范围调整。
-- E(SAR Aug)
-  - 当前：`vertical_flip_prob=0.5`，`speckle_prob=0.35`，`speckle_std=0.02~0.10`，`contrast_stretch_prob=0.35`
-  - 可尝试：`speckle_prob ∈ [0.2, 0.5]`，`max_std ∈ [0.08, 0.15]`
-  - 旁注：若出现收敛变慢，可先降低 `speckle_prob` 到 `0.2`。
+- G(QueryInit)
+  - 当前：`feature_level=0`，`highpass_radius_ratio=0.15`
+  - 可尝试：`feature_level ∈ {0,1}`，`radius_ratio ∈ {0, 0.1, 0.15, 0.2}`
+  - 旁注：若训练早期振荡，可先将 `radius_ratio` 设为 `0`。
 - F(SAR Shape)
   - 当前：`sar_shape_prior_loss_coef=0.3`
   - 可尝试：`0.1 / 0.3 / 0.5`

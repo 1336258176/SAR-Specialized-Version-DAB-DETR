@@ -102,6 +102,12 @@ def get_args_parser():
                         help="number of deformable attention sampling points in decoder layers")
     parser.add_argument('--enc_n_points', default=4, type=int, 
                         help="number of deformable attention sampling points in encoder layers")
+    parser.add_argument('--enable_saliency_query_init', action='store_true',
+                        help="Use DenoDet-style frequency saliency to initialize DAB reference points.")
+    parser.add_argument('--saliency_query_feature_level', default=0, type=int,
+                        help="Feature level index used to build saliency-guided query coordinates.")
+    parser.add_argument('--saliency_highpass_radius_ratio', default=0.15, type=float,
+                        help="Radius ratio for optional frequency high-pass saliency branch. Set 0 to disable.")
 
 
     # * Segmentation
@@ -212,28 +218,6 @@ def get_args_parser():
                         help='Score threshold before TTA NMS merging.')
     parser.add_argument('--tta_topk', default=100, type=int,
                         help='Final top-k predictions per image after TTA merging.')
-
-    # SAR-specific data augmentations
-    parser.add_argument('--enable_sar_vertical_flip', action='store_true',
-                        help='Enable SAR-specific random vertical flip in training augmentation.')
-    parser.add_argument('--sar_vertical_flip_prob', default=0.5, type=float,
-                        help='Probability for SAR vertical flip augmentation.')
-    parser.add_argument('--enable_sar_speckle_aug', action='store_true',
-                        help='Enable SAR-specific multiplicative speckle noise augmentation.')
-    parser.add_argument('--sar_speckle_prob', default=0.35, type=float,
-                        help='Probability for SAR speckle augmentation.')
-    parser.add_argument('--sar_speckle_min_std', default=0.02, type=float,
-                        help='Minimum std for SAR speckle noise.')
-    parser.add_argument('--sar_speckle_max_std', default=0.10, type=float,
-                        help='Maximum std for SAR speckle noise.')
-    parser.add_argument('--enable_sar_contrast_stretch', action='store_true',
-                        help='Enable SAR-specific percentile contrast stretching.')
-    parser.add_argument('--sar_contrast_stretch_prob', default=0.35, type=float,
-                        help='Probability for SAR contrast stretching.')
-    parser.add_argument('--sar_contrast_stretch_lower_q', default=0.02, type=float,
-                        help='Lower percentile for SAR contrast stretching.')
-    parser.add_argument('--sar_contrast_stretch_upper_q', default=0.98, type=float,
-                        help='Upper percentile for SAR contrast stretching.')
 
     # SAR-specific shape prior loss
     parser.add_argument('--enable_sar_shape_prior_loss', action='store_true',
