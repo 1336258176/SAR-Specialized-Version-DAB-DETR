@@ -281,6 +281,37 @@ def plot_learning_curves(experiments: List[Dict], output_dir: Path) -> None:
     save_figure(fig, output_dir, "learning_curves", rect=(0.0, 0.0, 1.0, 0.94))
 
 
+def plot_learning_rate_panels(experiments: List[Dict], output_dir: Path) -> None:
+    """
+    Plot LR schedules in a single figure with separate panels per experiment.
+    Each subplot contains only one experiment's LR curve.
+    """
+    if not experiments:
+        return
+
+    n = len(experiments)
+    ncols = min(3, n)
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.8 * ncols, 3.6 * nrows))
+    axes = np.atleast_1d(axes).ravel()
+    colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
+
+    for idx, exp in enumerate(experiments):
+        ax = axes[idx]
+        color = colors[idx % len(colors)]
+        xs, ys = extract_scalar(exp["records"], "train_lr")
+        if xs:
+            ax.plot(xs, ys, color=color, marker="o", markevery=max(1, len(xs) // 10))
+        ax.set_title(exp["name"])
+        format_axes(ax, ylabel="Learning Rate")
+
+    # Hide unused axes when experiments do not fill the full grid.
+    for idx in range(n, len(axes)):
+        axes[idx].set_visible(False)
+
+    save_figure(fig, output_dir, "learning_rate_panels", rect=(0.0, 0.0, 1.0, 0.98))
+
+
 def plot_detection_metrics(experiments: List[Dict], output_dir: Path) -> None:
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
     fig, axes = plt.subplots(2, 2, figsize=(11.5, 7.6))
@@ -435,6 +466,7 @@ def main():
     save_summary(experiments, output_dir)
     save_map_history(experiments, output_dir)
     plot_learning_curves(experiments, output_dir)
+    plot_learning_rate_panels(experiments, output_dir)
     plot_detection_metrics(experiments, output_dir)
     plot_recall_metrics(experiments, output_dir)
     plot_coco_full_metrics(experiments, output_dir)
