@@ -45,6 +45,22 @@ COCO_METRIC_NAMES = [
 ]
 
 
+COCO_METRIC_DISPLAY_NAMES = [
+    "mAP@[.50:.95]",
+    r"AP$_{50}$",
+    r"AP$_{75}$",
+    r"AP$_S$",
+    r"AP$_M$",
+    r"AP$_L$",
+    r"AR$_1$",
+    r"AR$_{10}$",
+    r"AR$_{100}$",
+    r"AR$_S$",
+    r"AR$_M$",
+    r"AR$_L$",
+]
+
+
 KEY_METRICS = {
     "AP": 0,
     "AP50": 1,
@@ -316,7 +332,12 @@ def plot_detection_metrics(experiments: List[Dict], output_dir: Path) -> None:
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
     fig, axes = plt.subplots(2, 2, figsize=(11.5, 7.6))
     axes = axes.ravel()
-    panels = [("AP", 0), ("AP50", 1), ("AP75", 2), ("AR100", 8)]
+    panels = [
+        (COCO_METRIC_DISPLAY_NAMES[0], 0),
+        (COCO_METRIC_DISPLAY_NAMES[1], 1),
+        (COCO_METRIC_DISPLAY_NAMES[2], 2),
+        (COCO_METRIC_DISPLAY_NAMES[8], 8),
+    ]
 
     for exp_idx, exp in enumerate(experiments):
         color = colors[exp_idx % len(colors)]
@@ -338,7 +359,14 @@ def plot_recall_metrics(experiments: List[Dict], output_dir: Path) -> None:
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
     fig, axes = plt.subplots(2, 3, figsize=(12.8, 7.6))
     axes = axes.ravel()
-    panels = [("AR1", 6), ("AR10", 7), ("AR100", 8), ("ARs", 9), ("ARm", 10), ("ARl", 11)]
+    panels = [
+        (COCO_METRIC_DISPLAY_NAMES[6], 6),
+        (COCO_METRIC_DISPLAY_NAMES[7], 7),
+        (COCO_METRIC_DISPLAY_NAMES[8], 8),
+        (COCO_METRIC_DISPLAY_NAMES[9], 9),
+        (COCO_METRIC_DISPLAY_NAMES[10], 10),
+        (COCO_METRIC_DISPLAY_NAMES[11], 11),
+    ]
 
     for exp_idx, exp in enumerate(experiments):
         color = colors[exp_idx % len(colors)]
@@ -363,7 +391,7 @@ def plot_coco_full_metrics(experiments: List[Dict], output_dir: Path) -> None:
 
     for exp_idx, exp in enumerate(experiments):
         color = colors[exp_idx % len(colors)]
-        for metric_idx, metric_name in enumerate(COCO_METRIC_NAMES):
+        for metric_idx, metric_name in enumerate(COCO_METRIC_DISPLAY_NAMES):
             ax = axes[metric_idx]
             xs, ys = extract_coco_metric(exp["records"], metric_idx)
             if xs:
@@ -377,12 +405,17 @@ def plot_coco_full_metrics(experiments: List[Dict], output_dir: Path) -> None:
 
 def plot_best_metric_bars(experiments: List[Dict], output_dir: Path) -> None:
     summaries = [summarize_experiment(exp) for exp in experiments]
-    metric_names = ["best_AP", "best_AP50", "best_AP75", "best_AR100"]
-    display_names = ["AP", "AP50", "AP75", "AR100"]
+    metric_names = ["best_mAP", "best_AP50", "best_AP75", "best_AR100"]
+    display_names = [
+        COCO_METRIC_DISPLAY_NAMES[0],
+        COCO_METRIC_DISPLAY_NAMES[1],
+        COCO_METRIC_DISPLAY_NAMES[2],
+        COCO_METRIC_DISPLAY_NAMES[8],
+    ]
     exp_names = [item["name"] for item in summaries]
     x = np.arange(len(exp_names))
     width = 0.18
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd"]
+    colors = ["#17becf", "#ff7f0e", "#2ca02c", "#9467bd"]
 
     fig, ax = plt.subplots(figsize=(10, 5.5))
     max_value = 0.0
@@ -390,7 +423,7 @@ def plot_best_metric_bars(experiments: List[Dict], output_dir: Path) -> None:
         values = [item.get(metric_name) or 0.0 for item in summaries]
         if values:
             max_value = max(max_value, max(values))
-        offset = (idx - 1.5) * width
+        offset = (idx - (len(metric_names) - 1) / 2) * width
         bars = ax.bar(x + offset, values, width=width, label=display_name, color=colors[idx], alpha=0.9)
         for bar, value in zip(bars, values):
             ax.text(
@@ -408,7 +441,7 @@ def plot_best_metric_bars(experiments: List[Dict], output_dir: Path) -> None:
     ax.set_xticks(x)
     ax.set_xticklabels(exp_names, rotation=15, ha="right")
     format_axes(ax, xlabel="Experiment", ylabel="Score")
-    ax.legend(frameon=False, ncol=4)
+    ax.legend(frameon=False, ncol=len(metric_names))
     ax.set_ylim(0, max(0.1, max_value * 1.22))
     save_figure(fig, output_dir, "best_metric_bars", rect=(0.0, 0.0, 1.0, 0.98))
 
@@ -423,9 +456,9 @@ def plot_scale_sensitivity(experiments: List[Dict], output_dir: Path) -> None:
     x = np.arange(len(exp_names))
     width = 0.24
     fig, ax = plt.subplots(figsize=(10, 5.5))
-    ax.bar(x - width, aps, width=width, label="APs", color="#4c78a8")
-    ax.bar(x, apm, width=width, label="APm", color="#f58518")
-    ax.bar(x + width, apl, width=width, label="APl", color="#54a24b")
+    ax.bar(x - width, aps, width=width, label=COCO_METRIC_DISPLAY_NAMES[3], color="#4c78a8")
+    ax.bar(x, apm, width=width, label=COCO_METRIC_DISPLAY_NAMES[4], color="#f58518")
+    ax.bar(x + width, apl, width=width, label=COCO_METRIC_DISPLAY_NAMES[5], color="#54a24b")
     ax.set_title("Object Scale Sensitivity")
     ax.set_xticks(x)
     ax.set_xticklabels(exp_names, rotation=15, ha="right")
